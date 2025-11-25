@@ -2,31 +2,35 @@
 Main UI module for Difference Machine add-on.
 Contains panels and menus registration.
 """
-
 import bpy
-from bpy.types import Panel
+from .ui_panels import (
+    DF_PT_branch_panel,
+    DF_PT_commit_panel,
+)
 
-
-class DIFFERENCE_MACHINE_PT_main_panel(Panel):
-    """Main panel for Difference Machine."""
-    bl_label = "Difference Machine"
-    bl_idname = "DIFFERENCE_MACHINE_PT_main_panel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "Difference Machine"
-
-    def draw(self, context):
-        """Draw the panel UI."""
-        layout = self.layout
-        layout.label(text="Version control system for 3D models")
+# Classes list for registration
+classes = [
+    DF_PT_branch_panel,
+    DF_PT_commit_panel,
+]
 
 
 def register():
-    """Register UI classes."""
-    bpy.utils.register_class(DIFFERENCE_MACHINE_PT_main_panel)
+    """Register UI classes and properties"""
+    try:
+        # Register UI classes
+        for cls in classes:
+            bpy.utils.register_class(cls)
+    except Exception as e:
+        print(f"Error registering UI classes: {e}")
+        raise
 
 
 def unregister():
-    """Unregister UI classes."""
-    bpy.utils.unregister_class(DIFFERENCE_MACHINE_PT_main_panel)
-
+    try:
+        # Unregister UI classes
+        for cls in reversed(classes):
+            bpy.utils.unregister_class(cls)
+    except Exception as e:
+        print(f"Error unregistering UI classes: {e}")
+        raise
