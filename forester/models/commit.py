@@ -214,3 +214,4 @@ class Commit:
         """
         return Tree.from_storage(self.tree_hash, db, storage)
 
+

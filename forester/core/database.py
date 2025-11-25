@@ -440,3 +440,4 @@ class ForesterDB:
         cursor.execute("DELETE FROM stash WHERE hash = ?", (stash_hash,))
         self.conn.commit()
 
+

@@ -128,3 +128,4 @@ class Blob:
         """
         return storage.load_blob(self.hash)
 
+

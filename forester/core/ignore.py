@@ -184,3 +184,4 @@ class IgnoreRules:
             for rule in default_rules:
                 f.write(f"{rule}\n")
 
+
