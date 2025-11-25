@@ -20,7 +20,10 @@ class Commit:
     
     def __init__(self, hash: str, parent_hash: Optional[str], tree_hash: str,
                  branch: str, timestamp: int, message: str, author: str,
-                 mesh_hashes: Optional[List[str]] = None):
+                 mesh_hashes: Optional[List[str]] = None,
+                 commit_type: str = "project",
+                 selected_mesh_names: Optional[List[str]] = None,
+                 export_options: Optional[Dict[str, bool]] = None):
         """
         Initialize commit.
         
@@ -33,6 +36,9 @@ class Commit:
             message: Commit message
             author: Author name
             mesh_hashes: List of mesh hashes (optional)
+            commit_type: Type of commit ("project" or "mesh_only")
+            selected_mesh_names: List of selected mesh names (for mesh_only commits)
+            export_options: Export options dict (for mesh_only commits)
         """
         self.hash = hash
         self.parent_hash = parent_hash
@@ -42,20 +48,25 @@ class Commit:
         self.message = message
         self.author = author
         self.mesh_hashes = mesh_hashes or []
+        self.commit_type = commit_type
+        self.selected_mesh_names = selected_mesh_names or []
+        self.export_options = export_options or {}
     
     def compute_hash(self) -> str:
         """
         Compute hash of the commit.
         
-        Hash is computed from: parent_hash + tree_hash + timestamp + message
+        Hash is computed from: commit_type + parent_hash + tree_hash + timestamp + message + mesh_hashes + export_options
         
         Returns:
             SHA-256 hash string
         """
         parent_str = self.parent_hash or ""
         mesh_str = json.dumps(sorted(self.mesh_hashes), sort_keys=True) if self.mesh_hashes else ""
+        mesh_names_str = json.dumps(sorted(self.selected_mesh_names), sort_keys=True) if self.selected_mesh_names else ""
+        export_opts_str = json.dumps(self.export_options, sort_keys=True) if self.export_options else ""
         
-        commit_data = f"{parent_str}{self.tree_hash}{self.timestamp}{self.message}{mesh_str}"
+        commit_data = f"{self.commit_type}{parent_str}{self.tree_hash}{self.timestamp}{self.message}{mesh_str}{mesh_names_str}{export_opts_str}"
         return compute_hash(commit_data.encode('utf-8'))
     
     def to_dict(self) -> dict:
@@ -73,7 +84,10 @@ class Commit:
             "timestamp": self.timestamp,
             "message": self.message,
             "author": self.author,
-            "mesh_hashes": self.mesh_hashes
+            "mesh_hashes": self.mesh_hashes,
+            "commit_type": self.commit_type,
+            "selected_mesh_names": self.selected_mesh_names,
+            "export_options": self.export_options
         }
     
     @classmethod
@@ -95,7 +109,10 @@ class Commit:
             timestamp=data['timestamp'],
             message=data.get('message', ''),
             author=data.get('author', ''),
-            mesh_hashes=data.get('mesh_hashes', [])
+            mesh_hashes=data.get('mesh_hashes', []),
+            commit_type=data.get('commit_type', 'project'),
+            selected_mesh_names=data.get('selected_mesh_names', []),
+            export_options=data.get('export_options', {})
         )
     
     def save_to_storage(self, db: ForesterDB, storage: ObjectStorage) -> None:
@@ -122,7 +139,10 @@ class Commit:
             timestamp=self.timestamp,
             message=self.message,
             tree_hash=self.tree_hash,
-            author=self.author
+            author=self.author,
+            commit_type=self.commit_type,
+            selected_mesh_names=self.selected_mesh_names,
+            export_options=self.export_options
         )
     
     @classmethod
@@ -142,12 +162,18 @@ class Commit:
         # Try to load from database first
         commit_info = db.get_commit(commit_hash)
         if commit_info:
-            # Load mesh_hashes from storage if available
+            # Load full data from storage if available
             try:
                 commit_data = storage.load_commit(commit_hash)
                 mesh_hashes = commit_data.get('mesh_hashes', [])
+                commit_type = commit_data.get('commit_type', 'project')
+                selected_mesh_names = commit_data.get('selected_mesh_names', [])
+                export_options = commit_data.get('export_options', {})
             except FileNotFoundError:
                 mesh_hashes = []
+                commit_type = commit_info.get('commit_type', 'project')
+                selected_mesh_names = []
+                export_options = {}
             
             return cls(
                 hash=commit_info['hash'],
@@ -157,7 +183,10 @@ class Commit:
                 timestamp=commit_info['timestamp'],
                 message=commit_info.get('message', ''),
                 author=commit_info.get('author', ''),
-                mesh_hashes=mesh_hashes
+                mesh_hashes=mesh_hashes,
+                commit_type=commit_type,
+                selected_mesh_names=selected_mesh_names,
+                export_options=export_options
             )
         
         # Try to load from storage
@@ -169,7 +198,9 @@ class Commit:
     
     @classmethod
     def create(cls, tree: Tree, branch: str, message: str, author: str,
-               parent_hash: Optional[str] = None, mesh_hashes: Optional[List[str]] = None) -> 'Commit':
+               parent_hash: Optional[str] = None, mesh_hashes: Optional[List[str]] = None,
+               commit_type: str = "project", selected_mesh_names: Optional[List[str]] = None,
+               export_options: Optional[Dict[str, bool]] = None) -> 'Commit':
         """
         Create a new commit.
         
@@ -180,6 +211,9 @@ class Commit:
             author: Author name
             parent_hash: Parent commit hash (optional)
             mesh_hashes: List of mesh hashes (optional)
+            commit_type: Type of commit ("project" or "mesh_only")
+            selected_mesh_names: List of selected mesh names (for mesh_only)
+            export_options: Export options dict (for mesh_only)
             
         Returns:
             Commit instance
@@ -194,7 +228,10 @@ class Commit:
             timestamp=timestamp,
             message=message,
             author=author,
-            mesh_hashes=mesh_hashes or []
+            mesh_hashes=mesh_hashes or [],
+            commit_type=commit_type,
+            selected_mesh_names=selected_mesh_names or [],
+            export_options=export_options or {}
         )
         
         commit.hash = commit.compute_hash()

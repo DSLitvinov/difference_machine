@@ -64,9 +64,28 @@ class ForesterDB:
                 timestamp INTEGER NOT NULL,
                 message TEXT,
                 tree_hash TEXT NOT NULL,
-                author TEXT
+                author TEXT,
+                commit_type TEXT DEFAULT 'project',
+                selected_mesh_names TEXT,
+                export_options TEXT
             )
         """)
+        
+        # Migrate existing tables (add new columns if they don't exist)
+        try:
+            cursor.execute("ALTER TABLE commits ADD COLUMN commit_type TEXT DEFAULT 'project'")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        try:
+            cursor.execute("ALTER TABLE commits ADD COLUMN selected_mesh_names TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        try:
+            cursor.execute("ALTER TABLE commits ADD COLUMN export_options TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         
         # Trees table
         cursor.execute("""
@@ -141,16 +160,23 @@ class ForesterDB:
     # ========== Commits operations ==========
     
     def add_commit(self, commit_hash: str, branch: str, parent_hash: Optional[str],
-                   timestamp: int, message: str, tree_hash: str, author: str) -> None:
+                   timestamp: int, message: str, tree_hash: str, author: str,
+                   commit_type: str = "project", selected_mesh_names: Optional[List[str]] = None,
+                   export_options: Optional[Dict[str, Any]] = None) -> None:
         """Add commit to database."""
         if self.conn is None:
             self.connect()
         
         cursor = self.conn.cursor()
+        selected_mesh_names_json = json.dumps(selected_mesh_names) if selected_mesh_names else None
+        export_options_json = json.dumps(export_options) if export_options else None
+        
         cursor.execute("""
-            INSERT INTO commits (hash, branch, parent_hash, timestamp, message, tree_hash, author)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (commit_hash, branch, parent_hash, timestamp, message, tree_hash, author))
+            INSERT INTO commits (hash, branch, parent_hash, timestamp, message, tree_hash, author,
+                                commit_type, selected_mesh_names, export_options)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (commit_hash, branch, parent_hash, timestamp, message, tree_hash, author,
+              commit_type, selected_mesh_names_json, export_options_json))
         self.conn.commit()
     
     def get_commit(self, commit_hash: str) -> Optional[Dict[str, Any]]:
@@ -163,7 +189,29 @@ class ForesterDB:
         row = cursor.fetchone()
         
         if row:
-            return dict(row)
+            result = dict(row)
+            # Parse JSON fields
+            if result.get('selected_mesh_names'):
+                try:
+                    result['selected_mesh_names'] = json.loads(result['selected_mesh_names'])
+                except (json.JSONDecodeError, TypeError):
+                    result['selected_mesh_names'] = []
+            else:
+                result['selected_mesh_names'] = []
+            
+            if result.get('export_options'):
+                try:
+                    result['export_options'] = json.loads(result['export_options'])
+                except (json.JSONDecodeError, TypeError):
+                    result['export_options'] = {}
+            else:
+                result['export_options'] = {}
+            
+            # Set default commit_type if not present
+            if 'commit_type' not in result or not result['commit_type']:
+                result['commit_type'] = 'project'
+            
+            return result
         return None
     
     def get_last_commit(self, branch: str) -> Optional[Dict[str, Any]]:

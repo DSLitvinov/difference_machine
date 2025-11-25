@@ -10,13 +10,15 @@ bl_info = {
 }
 
 from .ui import ui_main
+from .properties import properties
 
 def register():
+    properties.register()
     ui_main.register()
-    # Operator classes are registered through ui_main
 
 def unregister():
     ui_main.unregister()
+    properties.unregister()
 
 if __name__ == "__main__":
     register()

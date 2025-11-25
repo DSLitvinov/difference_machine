@@ -23,6 +23,13 @@ from .stash import (
     apply_stash,
     delete_stash,
 )
+from .mesh_commit import (
+    create_mesh_only_commit,
+    auto_compress_mesh_commits,
+)
+from .delete_commit import (
+    delete_commit,
+)
 
 __all__ = [
     "init_repository",
@@ -42,5 +49,8 @@ __all__ = [
     "list_stashes",
     "apply_stash",
     "delete_stash",
+    "create_mesh_only_commit",
+    "auto_compress_mesh_commits",
+    "delete_commit",
 ]
 

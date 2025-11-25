@@ -4,14 +4,59 @@ Contains panels and menus registration.
 """
 import bpy
 from .ui_panels import (
-    DF_PT_branch_panel,
     DF_PT_commit_panel,
+    DF_PT_history_panel,
+    DF_PT_branch_panel,
 )
-
+from .ui_lists import (
+    DF_UL_branch_list,
+    DF_UL_commit_list,
+)
+from ..operators.commit_operators import (
+    DF_OT_create_project_commit,
+    DF_OT_create_mesh_commit,
+    DF_OT_refresh_history,
+    DF_OT_refresh_branches,
+    DF_OT_create_branch,
+    DF_OT_switch_branch,
+    DF_OT_delete_branch,
+)
+from ..operators.history_operators import (
+    DF_OT_select_commit,
+    DF_OT_checkout_commit,
+    DF_OT_delete_commit,
+)
+from ..operators.branch_operators import (
+    DF_OT_sort_branches,
+)
+from ..operators.export_operators import (
+    DF_OT_toggle_export_component,
+)
 # Classes list for registration
 classes = [
-    DF_PT_branch_panel,
+    # UI Lists
+    DF_UL_branch_list,
+    DF_UL_commit_list,
+    # Panels
     DF_PT_commit_panel,
+    DF_PT_history_panel,
+    DF_PT_branch_panel,
+    # Operators
+    DF_OT_create_project_commit,
+    DF_OT_create_mesh_commit,
+    DF_OT_refresh_history,
+    DF_OT_refresh_branches,
+    DF_OT_create_branch,
+    DF_OT_switch_branch,
+    DF_OT_delete_branch,
+    # History operators
+    DF_OT_select_commit,
+    DF_OT_checkout_commit,
+    DF_OT_delete_commit,
+    # Branch operators
+    DF_OT_sort_branches,
+    # Export operators
+    DF_OT_toggle_export_component,
 ]
 
 

@@ -80,14 +80,20 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
         if not working_dir.exists():
             working_dir = repo_path  # Fallback to repo root
         
-        # Step 1: Clear working directory (completely, including meshes/)
-        clear_working_directory(working_dir, dfm_dir)
-        
-        # Step 2: Restore files from tree
-        restore_files_from_tree(tree, working_dir, storage, db)
-        
-        # Step 3: Restore meshes from commit
-        restore_meshes_from_commit(commit, working_dir, storage, dfm_dir)
+        # Check commit type
+        if commit.commit_type == "mesh_only":
+            # Mesh-only checkout: restore only selected meshes, don't touch other files
+            restore_meshes_from_mesh_only_commit(commit, working_dir, storage, db, dfm_dir)
+        else:
+            # Project checkout: full restore
+            # Step 1: Clear working directory (completely, including meshes/)
+            clear_working_directory(working_dir, dfm_dir)
+            
+            # Step 2: Restore files from tree
+            restore_files_from_tree(tree, working_dir, storage, db)
+            
+            # Step 3: Restore meshes from commit
+            restore_meshes_from_commit(commit, working_dir, storage, dfm_dir)
         
         # Step 4: Update HEAD and metadata
         if is_branch:
@@ -174,13 +180,69 @@ def restore_files_from_tree(tree: Tree, working_dir: Path, storage: ObjectStorag
             f.write(blob_data)
 
 
+def restore_meshes_from_mesh_only_commit(commit: Commit, working_dir: Path,
+                                         storage: ObjectStorage, db: ForesterDB,
+                                         base_dir: Path) -> None:
+    """
+    Restore meshes from mesh-only commit.
+    Only restores selected meshes, doesn't touch other files.
+    
+    Args:
+        commit: Commit object (mesh_only type)
+        working_dir: Working directory path
+        storage: Object storage
+        db: Database connection
+        base_dir: Base directory (.DFM/)
+    """
+    if not commit.mesh_hashes or not commit.selected_mesh_names:
+        return
+    
+    # Create meshes directory if needed
+    meshes_dir = working_dir / "meshes"
+    meshes_dir.mkdir(exist_ok=True)
+    
+    # Restore each mesh
+    for i, mesh_hash in enumerate(commit.mesh_hashes):
+        if i >= len(commit.selected_mesh_names):
+            break
+        
+        mesh_name = commit.selected_mesh_names[i]
+        
+        try:
+            # Load mesh
+            from ..models.mesh import Mesh
+            mesh = Mesh.from_storage(mesh_hash, db, storage)
+            if not mesh:
+                continue
+            
+            # Use mesh_hash for directory name (as stored in tree)
+            mesh_dir_name = mesh_hash[:16]
+            mesh_dir = meshes_dir / mesh_dir_name
+            mesh_dir.mkdir(exist_ok=True)
+            
+            # Save mesh.json
+            import json
+            mesh_json_path = mesh_dir / "mesh.json"
+            with open(mesh_json_path, 'w', encoding='utf-8') as f:
+                json.dump(mesh.mesh_json, f, indent=2, ensure_ascii=False)
+            
+            # Save material.json
+            material_json_path = mesh_dir / "material.json"
+            with open(material_json_path, 'w', encoding='utf-8') as f:
+                json.dump(mesh.material_json, f, indent=2, ensure_ascii=False)
+                
+        except Exception as e:
+            print(f"Warning: Could not restore mesh {mesh_name}: {e}")
+            continue
+
+
 def restore_meshes_from_commit(commit: Commit, working_dir: Path, 
                                storage: ObjectStorage, base_dir: Path) -> None:
     """
-    Restore meshes from commit to working directory.
+    Restore meshes from project commit to working directory.
     
     Args:
-        commit: Commit object
+        commit: Commit object (project type)
         working_dir: Working directory path
         storage: Object storage
         base_dir: Base directory (.DFM/)

@@ -78,6 +78,47 @@ class Blob:
         )
     
     @classmethod
+    def from_file_data(cls, data: bytes, blob_hash: str, base_dir: Path,
+                      db: ForesterDB, storage: ObjectStorage) -> 'Blob':
+        """
+        Create blob from data in memory.
+        
+        Args:
+            data: Binary data
+            blob_hash: SHA-256 hash of the data
+            base_dir: Base directory of repository (.DFM/)
+            db: Database connection
+            storage: Object storage
+            
+        Returns:
+            Blob instance
+        """
+        # Check if blob already exists
+        if db.blob_exists(blob_hash):
+            blob_info = db.get_blob(blob_hash)
+            return cls(
+                hash=blob_info['hash'],
+                path=Path(blob_info['path']),
+                size=blob_info['size'],
+                created_at=blob_info.get('created_at')
+            )
+        
+        # Save to storage
+        storage_path = storage.save_blob(data, blob_hash)
+        
+        # Add to database
+        import time
+        created_at = int(time.time())
+        db.add_blob(blob_hash, str(storage_path), len(data), created_at)
+        
+        return cls(
+            hash=blob_hash,
+            path=storage_path,
+            size=len(data),
+            created_at=created_at
+        )
+    
+    @classmethod
     def from_storage(cls, blob_hash: str, db: ForesterDB, 
                      storage: ObjectStorage) -> Optional['Blob']:
         """
