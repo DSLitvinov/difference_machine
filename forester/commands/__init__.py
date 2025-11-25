@@ -12,6 +12,11 @@ from .branch import (
     get_branch_commits,
     switch_branch,
 )
+from .checkout import (
+    checkout,
+    checkout_branch,
+    checkout_commit,
+)
 
 __all__ = [
     "init_repository",
@@ -24,5 +29,8 @@ __all__ = [
     "delete_branch",
     "get_branch_commits",
     "switch_branch",
+    "checkout",
+    "checkout_branch",
+    "checkout_commit",
 ]
 
