@@ -17,6 +17,12 @@ from .checkout import (
     checkout_branch,
     checkout_commit,
 )
+from .stash import (
+    create_stash,
+    list_stashes,
+    apply_stash,
+    delete_stash,
+)
 
 __all__ = [
     "init_repository",
@@ -32,5 +38,9 @@ __all__ = [
     "checkout",
     "checkout_branch",
     "checkout_commit",
+    "create_stash",
+    "list_stashes",
+    "apply_stash",
+    "delete_stash",
 ]
 
