@@ -1,8 +1,8 @@
 bl_info = {
-    "name": "Difference Engine",
+    "name": "Difference Engine (Alfa).Ammonitida",
     "author": "Dmitry Litvinov <nopomuk@yandex.ru>",
-    "version": (0, 0, 1),
-    "blender": (5, 0, 0),
+    "version": (0, 5, 0),
+    "blender": (4, 5, 0),
     "location": "View3D > UI > Difference Machine",
     "description": "Version control system for 3D models",
     "category": "3D View",

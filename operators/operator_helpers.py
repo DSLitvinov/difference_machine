@@ -5,7 +5,7 @@ Helper functions for operators to reduce code duplication.
 import bpy
 from pathlib import Path
 from typing import Optional, Tuple
-from forester.commands import find_repository
+from ..forester.commands import find_repository
 
 
 def get_repository_path(operator=None) -> Tuple[Optional[Path], Optional[str]]:

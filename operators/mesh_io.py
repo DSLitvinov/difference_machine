@@ -95,7 +95,7 @@ def export_mesh_to_json(obj, export_options):
                         if node.image.filepath:
                             abs_path = bpy.path.abspath(node.image.filepath)
                             if os.path.exists(abs_path):
-                                from forester.core.hashing import compute_file_hash
+                                from ..forester.core.hashing import compute_file_hash
                                 try:
                                     texture_info['file_hash'] = compute_file_hash(Path(abs_path))
                                 except Exception:
@@ -367,10 +367,10 @@ def load_mesh_from_commit(repo_path: Path, commit_hash: str, mesh_name: str) -> 
     Returns:
         Tuple of (mesh_json, material_json, mesh_storage_path) or (None, None, None) if not found
     """
-    from forester.core.database import ForesterDB
-    from forester.core.storage import ObjectStorage
-    from forester.models.commit import Commit
-    from forester.models.mesh import Mesh
+    from ..forester.core.database import ForesterDB
+    from ..forester.core.storage import ObjectStorage
+    from ..forester.models.commit import Commit
+    from ..forester.models.mesh import Mesh
     
     dfm_dir = repo_path / ".DFM"
     db_path = dfm_dir / "forester.db"

@@ -1,14 +1,14 @@
 schema_version = "1.0.0"
 id = "difference_machine"
-name = "Difference Machine"
-version = "0.0.1"
+name = "Difference Machine (Alfa).Ammonitida"
+version = "0.5.0"
 tagline = "Version control"
 maintainer = "Dmitry Litvinov <nopomuk@yandex.ru>"
 type = "add-on"
 tags = ["Object"]
-blender_version_min = "5.0.0"
+blender_version_min = "4.5.0"
 license = ["SPDX:GPL-3.0-or-later"]
-website = "https://github.com/DSLitvinov/difference_engine"
+website = "https://github.com/DSLitvinov/difference_machine"
 copyright = ["2025 nopomuk"]
 [permissions]
 files = "Creates and updates files in the add-on directory"

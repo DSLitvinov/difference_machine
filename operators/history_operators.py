@@ -5,15 +5,9 @@ Operators for commit history operations.
 import bpy
 from bpy.types import Operator
 from bpy.props import StringProperty, IntProperty
-import sys
 from pathlib import Path
 
-# Add forester to path
-addon_dir = Path(__file__).parent.parent
-if str(addon_dir) not in sys.path:
-    sys.path.insert(0, str(addon_dir))
-
-from forester.commands import (
+from ..forester.commands import (
     find_repository,
     checkout_commit,
     get_branch_commits,

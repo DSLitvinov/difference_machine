@@ -5,26 +5,22 @@ Operators for commit operations in Difference Machine.
 import bpy
 from bpy.types import Operator
 from bpy.props import StringProperty
-import sys
 from pathlib import Path
 
-# Add forester to path
-# Get the addon directory (difference_machine)
-addon_dir = Path(__file__).parent.parent
-forester_path = addon_dir / "forester"
-if str(forester_path) not in sys.path:
-    sys.path.insert(0, str(addon_dir))
-
-from forester.commands import (
+from ..forester.commands import (
     find_repository,
     init_repository,
     create_commit,
     create_mesh_only_commit,
     auto_compress_mesh_commits,
     create_branch,
+    get_branch_commits,
+    list_branches,
+    switch_branch,
+    delete_branch,
 )
-from forester.core.refs import get_branch_ref
-from forester.core.metadata import Metadata
+from ..forester.core.refs import get_branch_ref, get_current_branch
+from ..forester.core.metadata import Metadata
 from .mesh_io import export_mesh_to_json
 from .operator_helpers import get_repository_path, process_meshes_sequentially
 
@@ -237,9 +233,6 @@ class DF_OT_refresh_history(Operator):
         branch_name = props.branch or "main"
         
         # Get commits from forester
-        from forester.commands import get_branch_commits
-        from forester.core.refs import get_current_branch
-        
         try:
             commits_data = get_branch_commits(repo_path, branch_name)
             
@@ -297,9 +290,6 @@ class DF_OT_refresh_branches(Operator):
             return {'FINISHED'}
         
         # Get branches from forester
-        from forester.commands import list_branches
-        from forester.core.refs import get_current_branch
-        
         try:
             branches_data = list_branches(repo_path)
             current_branch = get_current_branch(repo_path)
@@ -314,7 +304,6 @@ class DF_OT_refresh_branches(Operator):
                 branch_item.is_current = branch_data.get('current', False) or (branch_data['name'] == current_branch)
                 
                 # Get commit count and last commit
-                from forester.commands import get_branch_commits
                 commits = get_branch_commits(repo_path, branch_data['name'])
                 branch_item.commit_count = len(commits)
                 
@@ -426,7 +415,6 @@ class DF_OT_switch_branch(Operator):
             return {'CANCELLED'}
         
         try:
-            from forester.commands import switch_branch
             switch_branch(repo_path, self.branch_name)
             
             # Update props
@@ -472,21 +460,18 @@ class DF_OT_delete_branch(Operator):
             return {'CANCELLED'}
         
         # Check if this is the last branch
-        from forester.commands import list_branches
         branches = list_branches(repo_path)
         if len(branches) <= 1:
             self.report({'ERROR'}, "Cannot delete the last branch")
             return {'CANCELLED'}
         
         # Check if this is the current branch
-        from forester.core.refs import get_current_branch
         current_branch = get_current_branch(repo_path)
         if self.branch_name == current_branch:
             self.report({'ERROR'}, f"Cannot delete current branch '{self.branch_name}'. Switch to another branch first.")
             return {'CANCELLED'}
         
         try:
-            from forester.commands import delete_branch
             delete_branch(repo_path, self.branch_name, force=False)
             self.report({'INFO'}, f"Branch '{self.branch_name}' deleted")
             # Refresh branches list
