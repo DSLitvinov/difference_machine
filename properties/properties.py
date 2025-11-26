@@ -207,6 +207,11 @@ def register():
         name="Original Object Name",
         default="",
     )
+    
+    bpy.types.Scene.df_comparison_commit_hash = bpy.props.StringProperty(
+        name="Comparison Commit Hash",
+        default="",
+    )
 
 
 def unregister():
@@ -260,6 +265,12 @@ def unregister():
     if hasattr(bpy.types.Scene, 'df_original_object_name'):
         try:
             del bpy.types.Scene.df_original_object_name
+        except:
+            pass
+    
+    if hasattr(bpy.types.Scene, 'df_comparison_commit_hash'):
+        try:
+            del bpy.types.Scene.df_comparison_commit_hash
         except:
             pass
     

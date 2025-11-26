@@ -310,6 +310,8 @@ class DF_OT_compare_mesh(Operator):
             bpy.data.objects.remove(comparison_obj, do_unlink=True)
             scene.df_comparison_object_name = ""
             scene.df_comparison_active = False
+            scene.df_comparison_commit_hash = ""
+            scene.df_original_object_name = ""
             self.report({'INFO'}, "Comparison mode disabled")
             return {'FINISHED'}
         
@@ -342,6 +344,7 @@ class DF_OT_compare_mesh(Operator):
             scene.df_comparison_object_name = comparison_obj.name
             scene.df_comparison_active = True
             scene.df_original_object_name = original_obj.name
+            scene.df_comparison_commit_hash = self.commit_hash
             
             # Restore focus to original object
             for obj in context.selected_objects:

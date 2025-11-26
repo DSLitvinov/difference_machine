@@ -20,6 +20,22 @@ class DF_PT_commit_panel(Panel):
         layout = self.layout
         props = context.scene.df_commit_props
         
+        # Проверяем, является ли активный объект объектом сравнения
+        active_obj = context.active_object
+        scene = context.scene
+        comparison_obj_name = getattr(scene, 'df_comparison_object_name', None)
+        is_comparison_object = (active_obj and 
+                               active_obj.type == 'MESH' and 
+                               comparison_obj_name and 
+                               active_obj.name == comparison_obj_name)
+        
+        if is_comparison_object:
+            # Если активен объект сравнения, показываем только информационное сообщение
+            box = layout.box()
+            box.label(text="Comparison mode active", icon='INFO')
+            box.label(text="Only viewing is available")
+            return
+        
         # Commit mode switcher
         row = layout.row()
         row.prop(props, "commit_mode", expand=True)
@@ -141,7 +157,15 @@ class DF_PT_branch_panel(Panel):
         scene = context.scene
         props = context.scene.df_commit_props
         
-        # Refresh button
+        # Проверяем, является ли активный объект объектом сравнения
+        active_obj = context.active_object
+        comparison_obj_name = getattr(scene, 'df_comparison_object_name', None)
+        is_comparison_object = (active_obj and 
+                               active_obj.type == 'MESH' and 
+                               comparison_obj_name and 
+                               active_obj.name == comparison_obj_name)
+        
+        # Refresh button (всегда доступен для просмотра)
         row = layout.row()
         row.operator("df.refresh_branches", text="Refresh Branches", icon='FILE_REFRESH')
         
@@ -169,39 +193,46 @@ class DF_PT_branch_panel(Panel):
                 rows=6  # Default 6 rows, stretchable
             )
         
-        # Branch operations
-        layout.separator()
-        
-        col = layout.column(align=True)
-        col.operator("df.create_branch", text="Create New Branch", icon='ADD')
-        col.operator("df.switch_branch", text="Switch Branch", icon='ARROW_LEFTRIGHT')
-        
-        # Delete branch button (only if branch is selected)
-        if (branches and 
-            hasattr(scene, 'df_branch_list_index') and
-            scene.df_branch_list_index >= 0 and 
-            scene.df_branch_list_index < len(branches)):
+        # Branch operations (скрываем для объекта сравнения)
+        if not is_comparison_object:
             layout.separator()
-            selected_branch = branches[scene.df_branch_list_index]
             
-            # Disable delete button if:
-            # 1. Only one branch exists (cannot delete the last branch)
-            # 2. Selected branch is the current branch (cannot delete current branch)
-            can_delete = len(branches) > 1 and not selected_branch.is_current
+            col = layout.column(align=True)
+            col.operator("df.create_branch", text="Create New Branch", icon='ADD')
+            col.operator("df.switch_branch", text="Switch Branch", icon='ARROW_LEFTRIGHT')
             
-            row = layout.row()
-            row.enabled = can_delete
-            row.scale_y = 1.2
-            op = row.operator("df.delete_branch", text="Delete Branch", icon='TRASH')
-            op.branch_name = selected_branch.name
-            
-            if not can_delete:
+            # Delete branch button (only if branch is selected)
+            if (branches and 
+                hasattr(scene, 'df_branch_list_index') and
+                scene.df_branch_list_index >= 0 and 
+                scene.df_branch_list_index < len(branches)):
                 layout.separator()
-                info_row = layout.row()
-                if len(branches) <= 1:
-                    info_row.label(text="Cannot delete the last branch", icon='INFO')
-                elif selected_branch.is_current:
-                    info_row.label(text="Cannot delete current branch", icon='INFO')
+                selected_branch = branches[scene.df_branch_list_index]
+                
+                # Disable delete button if:
+                # 1. Only one branch exists (cannot delete the last branch)
+                # 2. Selected branch is the current branch (cannot delete current branch)
+                can_delete = len(branches) > 1 and not selected_branch.is_current
+                
+                row = layout.row()
+                row.enabled = can_delete
+                row.scale_y = 1.2
+                op = row.operator("df.delete_branch", text="Delete Branch", icon='TRASH')
+                op.branch_name = selected_branch.name
+                
+                if not can_delete:
+                    layout.separator()
+                    info_row = layout.row()
+                    if len(branches) <= 1:
+                        info_row.label(text="Cannot delete the last branch", icon='INFO')
+                    elif selected_branch.is_current:
+                        info_row.label(text="Cannot delete current branch", icon='INFO')
+        else:
+            # Показываем информационное сообщение для объекта сравнения
+            layout.separator()
+            box = layout.box()
+            box.label(text="Comparison mode active", icon='INFO')
+            box.label(text="Only viewing is available")
 
 class DF_PT_history_panel(Panel):
     """Panel for viewing commit history."""
@@ -216,14 +247,25 @@ class DF_PT_history_panel(Panel):
         """Draw the panel UI."""
         layout = self.layout
         
-        # Refresh button
+        # Проверяем, является ли активный объект объектом сравнения
+        active_obj = context.active_object
+        scene = context.scene
+        comparison_obj_name = getattr(scene, 'df_comparison_object_name', None)
+        is_comparison_object = (active_obj and 
+                               active_obj.type == 'MESH' and 
+                               comparison_obj_name and 
+                               active_obj.name == comparison_obj_name)
+        
+        # Refresh button (всегда доступен для просмотра)
         row = layout.row()
         row.operator("df.refresh_history", icon='FILE_REFRESH')
         
-        # Branch selector
+        # Branch selector (только просмотр для объекта сравнения)
         props = context.scene.df_commit_props
         row = layout.row()
         row.label(text="Branch:")
+        if is_comparison_object:
+            row.enabled = False
         row.prop(props, "branch", text="")
         
         # Auto-refresh if list is empty and file is saved
@@ -261,10 +303,19 @@ class DF_PT_history_panel(Panel):
                 box.label(text=f"Author: {commit.author}")
                 box.label(text=f"Hash: {commit.hash[:16]}...")
                 
+                # Проверяем, является ли активный объект объектом сравнения
+                scene = context.scene
+                active_obj = context.active_object
+                comparison_obj_name = getattr(scene, 'df_comparison_object_name', None)
+                comparison_commit_hash = getattr(scene, 'df_comparison_commit_hash', None)
+                is_comparison_object = (active_obj and 
+                                       active_obj.type == 'MESH' and 
+                                       comparison_obj_name and 
+                                       active_obj.name == comparison_obj_name)
+                
                 # Action buttons - для mesh_only коммитов показываем Replace и Compare
                 if commit.commit_type == "mesh_only":
                     # Проверка: показываем кнопки только если выбранный объект есть в коммите
-                    active_obj = context.active_object
                     mesh_names_str = commit.selected_mesh_names or ""
                     
                     # Парсим selected_mesh_names (может быть JSON строка или обычная строка)
@@ -278,51 +329,65 @@ class DF_PT_history_panel(Panel):
                     except:
                         mesh_names = [mesh_names_str] if mesh_names_str else []
                     
-                    # Проверяем, есть ли активный объект в списке мешей коммита
-                    show_buttons = False
-                    if active_obj and active_obj.type == 'MESH' and active_obj.name in mesh_names:
-                        show_buttons = True
-                    
-                    if show_buttons:
-                        # Replace и Compare в одной строке
-                        layout.separator()
-                        row = layout.row(align=True)
-                        row.scale_y = 1.5
-                        op = row.operator("df.replace_mesh", text="Replace This Mesh", icon='FILE_REFRESH')
-                        op.commit_hash = commit.hash
-                        
-                        # Compare button with pressed state
-                        is_comparison_active = getattr(context.scene, 'df_comparison_active', False)
-                        op = row.operator("df.compare_mesh", text="Compare", icon='SPLIT_HORIZONTAL', depress=is_comparison_active)
-                        op.commit_hash = commit.hash
+                    # Если активен объект сравнения, показываем кнопки только для коммита, который использовался для его создания
+                    if is_comparison_object:
+                        if commit.hash == comparison_commit_hash:
+                            # Показываем только кнопку Compare в зажатом состоянии
+                            layout.separator()
+                            row = layout.row(align=True)
+                            row.scale_y = 1.5
+                            op = row.operator("df.compare_mesh", text="Compare", icon='SPLIT_HORIZONTAL', depress=True)
+                            op.commit_hash = comparison_commit_hash
+                        # Для других коммитов не показываем кнопки
                     else:
-                        # Показываем сообщение, если объект не выбран или не совпадает
-                        layout.separator()
-                        box = layout.box()
-                        if not active_obj or active_obj.type != 'MESH':
-                            box.label(text="Select a mesh object to load/replace", icon='INFO')
-                        elif mesh_names:
-                            box.label(text=f"Select one of: {', '.join(mesh_names)}", icon='INFO')
+                        # Проверяем, есть ли активный объект в списке мешей коммита
+                        show_buttons = False
+                        if active_obj and active_obj.type == 'MESH' and active_obj.name in mesh_names:
+                            show_buttons = True
+                        
+                        if show_buttons:
+                            # Replace и Compare в одной строке
+                            layout.separator()
+                            row = layout.row(align=True)
+                            row.scale_y = 1.5
+                            op = row.operator("df.replace_mesh", text="Replace This Mesh", icon='FILE_REFRESH')
+                            op.commit_hash = commit.hash
+                            
+                            # Compare button with pressed state
+                            is_comparison_active = getattr(context.scene, 'df_comparison_active', False)
+                            op = row.operator("df.compare_mesh", text="Compare", icon='SPLIT_HORIZONTAL', depress=is_comparison_active)
+                            op.commit_hash = commit.hash
                         else:
-                            box.label(text="No meshes in this commit", icon='INFO')
+                            # Показываем сообщение, если объект не выбран или не совпадает
+                            layout.separator()
+                            box = layout.box()
+                            if not active_obj or active_obj.type != 'MESH':
+                                box.label(text="Select a mesh object to load/replace", icon='INFO')
+                            elif mesh_names:
+                                box.label(text=f"Select one of: {', '.join(mesh_names)}", icon='INFO')
+                            else:
+                                box.label(text="No meshes in this commit", icon='INFO')
                     
-                    # Delete button
-                    layout.separator()
-                    row = layout.row()
-                    row.scale_y = 1.2
-                    op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
-                    op.commit_hash = commit.hash
+                    # Delete button (скрываем для объекта сравнения)
+                    if not is_comparison_object:
+                        layout.separator()
+                        row = layout.row()
+                        row.scale_y = 1.2
+                        op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
+                        op.commit_hash = commit.hash
                 else:
                     # Для обычных коммитов - Open project state и Delete
-                    # Открыть состояние проекта из этого коммита
-                    layout.separator()
-                    row = layout.row()
-                    row.scale_y = 1.2
-                    op = row.operator("df.open_project_state", text="Open Project State from This Commit", icon='FILE_FOLDER')
-                    op.commit_hash = commit.hash
-                    
-                    layout.separator()
-                    row = layout.row()
-                    row.scale_y = 1.2
-                    op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
-                    op.commit_hash = commit.hash
+                    # Скрываем кнопки, если активен объект сравнения
+                    if not is_comparison_object:
+                        # Открыть состояние проекта из этого коммита
+                        layout.separator()
+                        row = layout.row()
+                        row.scale_y = 1.2
+                        op = row.operator("df.open_project_state", text="Open Project State from This Commit", icon='FILE_FOLDER')
+                        op.commit_hash = commit.hash
+                        
+                        layout.separator()
+                        row = layout.row()
+                        row.scale_y = 1.2
+                        op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
+                        op.commit_hash = commit.hash
