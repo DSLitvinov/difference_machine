@@ -8,6 +8,23 @@ from typing import Optional, Tuple
 from ..forester.commands import find_repository
 
 
+def get_addon_preferences(context):
+    """Get addon preferences with fallback to default values."""
+    try:
+        addon = context.preferences.addons.get('difference_machine')
+        if addon and hasattr(addon, 'preferences'):
+            return addon.preferences
+    except (KeyError, AttributeError):
+        pass
+    
+    # Fallback: return a simple object with default values
+    class DefaultPreferences:
+        default_author = "Unknown"
+        auto_compress_keep_last_n = 5
+    
+    return DefaultPreferences()
+
+
 def get_repository_path(operator=None) -> Tuple[Optional[Path], Optional[str]]:
     """
     Get repository path from current Blender file.

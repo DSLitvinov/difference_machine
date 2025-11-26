@@ -155,6 +155,38 @@ class DFCommitProperties(bpy.types.PropertyGroup):
         }
 
 
+class DifferenceMachinePreferences(bpy.types.AddonPreferences):
+    """Preferences for Difference Machine add-on."""
+    bl_idname = "difference_machine"  # Должно совпадать с id в blender_manifest.toml
+    
+    default_author: StringProperty(
+        name="Default Author",
+        description="Default author name for commits",
+        default="Unknown",
+    )
+    
+    auto_compress_keep_last_n: IntProperty(
+        name="Keep Last N Commits",
+        description="Number of commits to keep when auto-compressing old versions",
+        default=5,
+        min=1,
+        max=100,
+    )
+    
+    def draw(self, context):
+        """Draw preferences UI."""
+        layout = self.layout
+        
+        # Основные настройки
+        box = layout.box()
+        box.label(text="Commit Settings", icon='SETTINGS')
+        box.prop(self, "default_author")
+        
+        box = layout.box()
+        box.label(text="Auto-compress Settings", icon='PACKAGE')
+        box.prop(self, "auto_compress_keep_last_n")
+
+
 def register():
     """Register custom properties."""
     # Import and register item classes first
@@ -176,6 +208,11 @@ def register():
     except (RuntimeError, ValueError):
         pass
     
+    try:
+        bpy.utils.unregister_class(DifferenceMachinePreferences)
+    except (RuntimeError, ValueError):
+        pass  # Class not registered yet
+    
     # Register item classes
     bpy.utils.register_class(DFCommitItem)
     bpy.utils.register_class(DFBranchItem)
@@ -183,6 +220,9 @@ def register():
     # Register main properties class
     bpy.utils.register_class(DFCommitProperties)
     bpy.types.Scene.df_commit_props = bpy.props.PointerProperty(type=DFCommitProperties)
+    
+    # Register addon preferences (must match id in blender_manifest.toml)
+    bpy.utils.register_class(DifferenceMachinePreferences)
     
     # Register collections for commits and branches (after item classes are registered)
     bpy.types.Scene.df_commits = bpy.props.CollectionProperty(type=DFCommitItem)
@@ -304,5 +344,11 @@ def unregister():
     
     try:
         bpy.utils.unregister_class(DFCommitItem)
+    except (RuntimeError, ValueError):
+        pass
+    
+    # Unregister addon preferences (must be last)
+    try:
+        bpy.utils.unregister_class(DifferenceMachinePreferences)
     except (RuntimeError, ValueError):
         pass

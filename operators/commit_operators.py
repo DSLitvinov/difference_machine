@@ -76,12 +76,17 @@ class DF_OT_create_project_commit(Operator):
                 # Branch might already exist (race condition), that's okay
                 pass
         
+        # Get default author from preferences
+        from .operator_helpers import get_addon_preferences
+        prefs = get_addon_preferences(context)
+        author = props.author if props.author else prefs.default_author
+        
         # Create commit
         try:
             commit_hash = create_commit(
                 repo_path=repo_path,
                 message=props.message or "No message",
-                author=props.author if props.author else "Unknown"
+                author=author
             )
             
             if commit_hash:
@@ -138,6 +143,11 @@ class DF_OT_create_mesh_commit(Operator):
         branch_name = props.branch or "main"
         export_options = props.get_export_options()
         
+        # Get default author from preferences
+        from .operator_helpers import get_addon_preferences
+        prefs = get_addon_preferences(context)
+        default_author = prefs.default_author
+        
         # Ensure branch exists (create if needed)
         branch_ref = get_branch_ref(repo_path, branch_name)
         if branch_ref is None:
@@ -180,7 +190,7 @@ class DF_OT_create_mesh_commit(Operator):
                 mesh_data_list=mesh_data_list,
                 export_options=export_options,
                 message=props.message or "No message",
-                author=props.author if props.author else "Unknown"
+                author=default_author
             )
             
             if commit_hash:
@@ -192,7 +202,7 @@ class DF_OT_create_mesh_commit(Operator):
                     deleted = auto_compress_mesh_commits(
                         repo_path=repo_path,
                         mesh_names=mesh_names,
-                        keep_last_n=props.keep_last_n_commits
+                        keep_last_n=prefs.auto_compress_keep_last_n
                     )
                     if deleted > 0:
                         self.report({'INFO'}, f"Compressed {deleted} old commits")

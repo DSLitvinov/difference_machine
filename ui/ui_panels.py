@@ -99,13 +99,6 @@ class DF_PT_commit_panel(Panel):
                     op.component = 'uv'
                     op.toggle = not props.export_uv
                 
-                # Auto-compress (separated, only for Selected Object mode)
-                layout.separator()
-                box = layout.box()
-                box.prop(props, "auto_compress", text="Auto-compress Old Versions", toggle=True)
-                if props.auto_compress:
-                    box.prop(props, "keep_last_n_commits")
-        
         # Full Project mode
         else:
             # Show working directory status (if available)
@@ -123,9 +116,6 @@ class DF_PT_commit_panel(Panel):
         
         # Message
         layout.prop(props, "message", text="Message")
-        
-        # Author
-        layout.prop(props, "author", text="Author")
         
         # Create commit button
         layout.separator()
