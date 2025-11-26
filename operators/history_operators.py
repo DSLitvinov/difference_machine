@@ -24,6 +24,7 @@ from .mesh_io import (
     import_mesh_to_blender,
     import_node_tree_structure,
 )
+from .operator_helpers import get_repository_path, get_active_mesh_object
 
 
 class DF_OT_select_commit(Operator):
@@ -69,14 +70,8 @@ class DF_OT_checkout_commit(Operator):
     def execute(self, context):
         """Execute the operator."""
         # Find repository
-        blend_file = Path(bpy.data.filepath)
-        if not blend_file:
-            self.report({'ERROR'}, "Please save the Blender file first")
-            return {'CANCELLED'}
-        
-        repo_path = find_repository(blend_file.parent)
+        repo_path, error = get_repository_path(self)
         if not repo_path:
-            self.report({'ERROR'}, "Not a Forester repository")
             return {'CANCELLED'}
         
         # Checkout commit
@@ -113,17 +108,13 @@ class DF_OT_open_project_state(Operator):
 
     def execute(self, context):
         """Checkout commit and open the corresponding .blend file."""
-        # Current .blend file (to know project root and filename)
-        blend_file = Path(bpy.data.filepath)
-        if not blend_file:
-            self.report({'ERROR'}, "Please save the Blender file first")
-            return {'CANCELLED'}
-
-        # Find repository from project root
-        repo_path = find_repository(blend_file.parent)
+        # Find repository
+        repo_path, error = get_repository_path(self)
         if not repo_path:
-            self.report({'ERROR'}, "Not a Forester repository")
             return {'CANCELLED'}
+        
+        # Get current .blend file (to know filename)
+        blend_file = Path(bpy.data.filepath)
 
         # Step 1: checkout commit into working directory
         try:
@@ -175,14 +166,8 @@ class DF_OT_delete_commit(Operator):
     def execute(self, context):
         """Execute the operator."""
         # Find repository
-        blend_file = Path(bpy.data.filepath)
-        if not blend_file:
-            self.report({'ERROR'}, "Please save the Blender file first")
-            return {'CANCELLED'}
-        
-        repo_path = find_repository(blend_file.parent)
+        repo_path, error = get_repository_path(self)
         if not repo_path:
-            self.report({'ERROR'}, "Not a Forester repository")
             return {'CANCELLED'}
         
         # Delete commit
@@ -219,14 +204,8 @@ class DF_OT_load_mesh_version(Operator):
     def execute(self, context):
         """Execute the operator."""
         # Find repository
-        blend_file = Path(bpy.data.filepath)
-        if not blend_file:
-            self.report({'ERROR'}, "Please save the Blender file first")
-            return {'CANCELLED'}
-        
-        repo_path = find_repository(blend_file.parent)
+        repo_path, error = get_repository_path(self)
         if not repo_path:
-            self.report({'ERROR'}, "Not a Forester repository")
             return {'CANCELLED'}
         
         # Load mesh from commit
@@ -265,22 +244,16 @@ class DF_OT_replace_mesh(Operator):
 
     def execute(self, context):
         """Execute the operator."""
-        active_obj = context.active_object
-        if not active_obj or active_obj.type != 'MESH':
-            self.report({'ERROR'}, "Please select a mesh object")
+        # Get active mesh object
+        active_obj, error = get_active_mesh_object(self)
+        if not active_obj:
             return {'CANCELLED'}
         
         mesh_name = active_obj.name
         
         # Find repository
-        blend_file = Path(bpy.data.filepath)
-        if not blend_file:
-            self.report({'ERROR'}, "Please save the Blender file first")
-            return {'CANCELLED'}
-        
-        repo_path = find_repository(blend_file.parent)
+        repo_path, error = get_repository_path(self)
         if not repo_path:
-            self.report({'ERROR'}, "Not a Forester repository")
             return {'CANCELLED'}
         
         # Load mesh from commit
@@ -322,14 +295,13 @@ class DF_OT_compare_mesh(Operator):
 
     def execute(self, context):
         """Execute the operator."""
-        active_obj = context.active_object
-        if not active_obj or active_obj.type != 'MESH':
-            self.report({'ERROR'}, "Please select a mesh object")
+        # Get active mesh object
+        active_obj, error = get_active_mesh_object(self)
+        if not active_obj:
             return {'CANCELLED'}
         
         mesh_name = active_obj.name
         original_obj = active_obj
-        
         
         # Check if comparison is already active
         scene = context.scene
@@ -344,14 +316,8 @@ class DF_OT_compare_mesh(Operator):
             return {'FINISHED'}
         
         # Find repository
-        blend_file = Path(bpy.data.filepath)
-        if not blend_file:
-            self.report({'ERROR'}, "Please save the Blender file first")
-            return {'CANCELLED'}
-        
-        repo_path = find_repository(blend_file.parent)
+        repo_path, error = get_repository_path(self)
         if not repo_path:
-            self.report({'ERROR'}, "Not a Forester repository")
             return {'CANCELLED'}
         
         # Load mesh from commit

@@ -26,6 +26,7 @@ from forester.commands import (
 from forester.core.refs import get_branch_ref
 from forester.core.metadata import Metadata
 from .mesh_io import export_mesh_to_json
+from .operator_helpers import get_repository_path, process_meshes_sequentially
 
 
 class DF_OT_create_project_commit(Operator):
@@ -159,10 +160,12 @@ class DF_OT_create_mesh_commit(Operator):
                 # Branch might already exist (race condition), that's okay
                 pass
         
-        # Export meshes
+        # Export meshes sequentially using single-mesh export function from mesh_io
+        # Each mesh is processed one at a time to avoid conflicts and ensure proper error handling
         mesh_data_list = []
         for obj in selected_objects:
             try:
+                # Use single-mesh export function from mesh_io.py
                 mesh_data = export_mesh_to_json(obj, export_options)
                 mesh_data['mesh_name'] = obj.name
                 mesh_data_list.append(mesh_data)
