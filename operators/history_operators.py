@@ -290,6 +290,34 @@ class DF_OT_compare_mesh(Operator):
         min=0.0,
         max=10.0
     )
+    axis: bpy.props.EnumProperty(
+        name="Axis",
+        description="Axis for comparison object offset",
+        items=[
+            ('X', 'X', 'Offset along X axis'),
+            ('Y', 'Y', 'Offset along Y axis'),
+            ('Z', 'Z', 'Offset along Z axis'),
+        ],
+        default='X',
+    )
+    
+    def invoke(self, context, event):
+        """Invoke operator directly without dialog."""
+        # Check if comparison is already active - if so, just toggle off
+        scene = context.scene
+        comparison_obj_name = getattr(scene, 'df_comparison_object_name', None)
+        if comparison_obj_name and comparison_obj_name in bpy.data.objects:
+            # Toggle OFF: Remove comparison object
+            return self.execute(context)
+        
+        # Get axis from scene property (selected via buttons in panel)
+        if hasattr(scene, 'df_comparison_axis'):
+            self.axis = scene.df_comparison_axis
+        else:
+            self.axis = 'X'  # Default to X
+        
+        # Execute directly without dialog
+        return self.execute(context)
 
     def execute(self, context):
         """Execute the operator."""
@@ -335,16 +363,24 @@ class DF_OT_compare_mesh(Operator):
                 mesh_storage_path=mesh_storage_path
             )
             
-            # Offset comparison object
-            comparison_obj.location.x = original_obj.location.x + self.offset_distance
+            # Offset comparison object based on selected axis
+            comparison_obj.location.x = original_obj.location.x
             comparison_obj.location.y = original_obj.location.y
             comparison_obj.location.z = original_obj.location.z
+            
+            if self.axis == 'X':
+                comparison_obj.location.x = original_obj.location.x + self.offset_distance
+            elif self.axis == 'Y':
+                comparison_obj.location.y = original_obj.location.y + self.offset_distance
+            elif self.axis == 'Z':
+                comparison_obj.location.z = original_obj.location.z + self.offset_distance
             
             # Store comparison state
             scene.df_comparison_object_name = comparison_obj.name
             scene.df_comparison_active = True
             scene.df_original_object_name = original_obj.name
             scene.df_comparison_commit_hash = self.commit_hash
+            scene.df_comparison_axis = self.axis
             
             # Restore focus to original object
             for obj in context.selected_objects:
@@ -352,7 +388,7 @@ class DF_OT_compare_mesh(Operator):
             original_obj.select_set(True)
             context.view_layer.objects.active = original_obj
             
-            self.report({'INFO'}, f"Comparison mode enabled (offset +{self.offset_distance})")
+            self.report({'INFO'}, f"Comparison mode enabled (offset +{self.offset_distance} on {self.axis} axis)")
             return {'FINISHED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to compare mesh: {str(e)}")
@@ -360,3 +396,109 @@ class DF_OT_compare_mesh(Operator):
             traceback.print_exc()
             return {'CANCELLED'}
 
+
+class DF_OT_switch_comparison_axis(Operator):
+    """Switch comparison axis and recreate comparison object."""
+    bl_idname = "df.switch_comparison_axis"
+    bl_label = "Switch Comparison Axis"
+    bl_description = "Switch comparison axis and recreate comparison object"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    axis: StringProperty(name="Axis", default='X')
+
+    def execute(self, context):
+        """Execute the operator."""
+        scene = context.scene
+        
+        # Update axis property
+        scene.df_comparison_axis = self.axis
+        
+        # Check if comparison is active
+        comparison_obj_name = getattr(scene, 'df_comparison_object_name', None)
+        if not comparison_obj_name or comparison_obj_name not in bpy.data.objects:
+            # If no comparison object, just update the axis property
+            self.report({'INFO'}, f"Comparison axis set to {self.axis}")
+            return {'FINISHED'}
+        
+        # Get original object
+        original_obj_name = getattr(scene, 'df_original_object_name', None)
+        if not original_obj_name or original_obj_name not in bpy.data.objects:
+            self.report({'ERROR'}, "Original object not found")
+            return {'CANCELLED'}
+        
+        original_obj = bpy.data.objects[original_obj_name]
+        comparison_obj = bpy.data.objects[comparison_obj_name]
+        commit_hash = getattr(scene, 'df_comparison_commit_hash', None)
+        
+        if not commit_hash:
+            self.report({'ERROR'}, "Commit hash not found")
+            return {'CANCELLED'}
+        
+        # Get mesh name (remove _compare suffix if present)
+        mesh_name = comparison_obj.name
+        if mesh_name.endswith('_compare'):
+            mesh_name = mesh_name[:-8]  # Remove '_compare'
+        
+        # Get offset distance from current position
+        offset_distance = 2.0
+        if self.axis == 'X':
+            offset_distance = abs(comparison_obj.location.x - original_obj.location.x)
+        elif self.axis == 'Y':
+            offset_distance = abs(comparison_obj.location.y - original_obj.location.y)
+        elif self.axis == 'Z':
+            offset_distance = abs(comparison_obj.location.z - original_obj.location.z)
+        
+        if offset_distance == 0:
+            offset_distance = 2.0  # Default distance
+        
+        # Find repository
+        repo_path, error = get_repository_path(self)
+        if not repo_path:
+            return {'CANCELLED'}
+        
+        # Load mesh from commit
+        try:
+            mesh_json, material_json, mesh_storage_path = load_mesh_from_commit(repo_path, commit_hash, mesh_name)
+            
+            if not mesh_json:
+                self.report({'ERROR'}, f"Mesh '{mesh_name}' not found in commit")
+                return {'CANCELLED'}
+            
+            # Remove old comparison object
+            bpy.data.objects.remove(comparison_obj, do_unlink=True)
+            
+            # Import to Blender (new object for comparison)
+            comparison_obj = import_mesh_to_blender(
+                context, mesh_json, material_json, 
+                f"{mesh_name}_compare", mode='NEW',
+                mesh_storage_path=mesh_storage_path
+            )
+            
+            # Offset comparison object based on selected axis
+            comparison_obj.location.x = original_obj.location.x
+            comparison_obj.location.y = original_obj.location.y
+            comparison_obj.location.z = original_obj.location.z
+            
+            if self.axis == 'X':
+                comparison_obj.location.x = original_obj.location.x + offset_distance
+            elif self.axis == 'Y':
+                comparison_obj.location.y = original_obj.location.y + offset_distance
+            elif self.axis == 'Z':
+                comparison_obj.location.z = original_obj.location.z + offset_distance
+            
+            # Update comparison state
+            scene.df_comparison_object_name = comparison_obj.name
+            
+            # Restore focus to original object
+            for obj in context.selected_objects:
+                obj.select_set(False)
+            original_obj.select_set(True)
+            context.view_layer.objects.active = original_obj
+            
+            self.report({'INFO'}, f"Comparison axis switched to {self.axis} (offset +{offset_distance})")
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to switch comparison axis: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {'CANCELLED'}

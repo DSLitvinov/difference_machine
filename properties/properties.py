@@ -212,6 +212,17 @@ def register():
         name="Comparison Commit Hash",
         default="",
     )
+    
+    bpy.types.Scene.df_comparison_axis = bpy.props.EnumProperty(
+        name="Comparison Axis",
+        description="Axis for comparison object offset",
+        items=[
+            ('X', 'X', 'Offset along X axis'),
+            ('Y', 'Y', 'Offset along Y axis'),
+            ('Z', 'Z', 'Offset along Z axis'),
+        ],
+        default='X',
+    )
 
 
 def unregister():
@@ -271,6 +282,12 @@ def unregister():
     if hasattr(bpy.types.Scene, 'df_comparison_commit_hash'):
         try:
             del bpy.types.Scene.df_comparison_commit_hash
+        except:
+            pass
+    
+    if hasattr(bpy.types.Scene, 'df_comparison_axis'):
+        try:
+            del bpy.types.Scene.df_comparison_axis
         except:
             pass
     

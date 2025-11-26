@@ -338,6 +338,27 @@ class DF_PT_history_panel(Panel):
                             row.scale_y = 1.5
                             op = row.operator("df.compare_mesh", text="Compare", icon='SPLIT_HORIZONTAL', depress=True)
                             op.commit_hash = comparison_commit_hash
+                            
+                            # Кнопки выбора осей
+                            layout.separator()
+                            box = layout.box()
+                            box.label(text="Axis Selection:", icon='AXIS_FRONT')
+                            row = box.row(align=True)
+                            row.scale_y = 1.3
+                            
+                            current_axis = getattr(scene, 'df_comparison_axis', 'X')
+                            
+                            # X axis button
+                            op = row.operator("df.switch_comparison_axis", text="X", depress=(current_axis == 'X'))
+                            op.axis = 'X'
+                            
+                            # Y axis button
+                            op = row.operator("df.switch_comparison_axis", text="Y", depress=(current_axis == 'Y'))
+                            op.axis = 'Y'
+                            
+                            # Z axis button
+                            op = row.operator("df.switch_comparison_axis", text="Z", depress=(current_axis == 'Z'))
+                            op.axis = 'Z'
                         # Для других коммитов не показываем кнопки
                     else:
                         # Проверяем, есть ли активный объект в списке мешей коммита
@@ -357,6 +378,27 @@ class DF_PT_history_panel(Panel):
                             is_comparison_active = getattr(context.scene, 'df_comparison_active', False)
                             op = row.operator("df.compare_mesh", text="Compare", icon='SPLIT_HORIZONTAL', depress=is_comparison_active)
                             op.commit_hash = commit.hash
+                            
+                            # Кнопки выбора осей (показываем всегда, когда можно создать объект сравнения)
+                            layout.separator()
+                            box = layout.box()
+                            box.label(text="Axis Selection:", icon='AXIS_FRONT')
+                            row = box.row(align=True)
+                            row.scale_y = 1.3
+                            
+                            current_axis = getattr(scene, 'df_comparison_axis', 'X')
+                            
+                            # X axis button
+                            op = row.operator("df.switch_comparison_axis", text="X", depress=(current_axis == 'X'))
+                            op.axis = 'X'
+                            
+                            # Y axis button
+                            op = row.operator("df.switch_comparison_axis", text="Y", depress=(current_axis == 'Y'))
+                            op.axis = 'Y'
+                            
+                            # Z axis button
+                            op = row.operator("df.switch_comparison_axis", text="Z", depress=(current_axis == 'Z'))
+                            op.axis = 'Z'
                         else:
                             # Показываем сообщение, если объект не выбран или не совпадает
                             layout.separator()
