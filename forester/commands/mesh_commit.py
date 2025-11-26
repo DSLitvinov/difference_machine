@@ -187,13 +187,39 @@ def create_mesh_only_commit(
                             # Remove temporary flag
                             texture_info.pop('needs_copy', None)
                     
+                    # Update node_data for TEX_IMAGE nodes with texture info (like in difference_engine)
+                    if 'node_tree' in material_json and 'nodes' in material_json['node_tree']:
+                        # Build texture lookup by node_name
+                        texture_by_node = {}
+                        for tex_info in material_json['textures']:
+                            node_name = tex_info.get('node_name')
+                            if node_name:
+                                texture_by_node[node_name] = tex_info
+                        
+                        # Update TEX_IMAGE node_data with texture paths
+                        for node_data in material_json['node_tree']['nodes']:
+                            if node_data.get('type') == 'TEX_IMAGE':
+                                node_name = node_data.get('name')
+                                texture_info = texture_by_node.get(node_name)
+                                
+                                if texture_info:
+                                    # Add copied_texture and image_file to node_data (like in difference_engine)
+                                    if texture_info.get('copied') and texture_info.get('commit_path'):
+                                        # Save only filename (remove "textures/" prefix if present)
+                                        commit_path = texture_info['commit_path']
+                                        if commit_path.startswith('textures/'):
+                                            commit_path = commit_path.replace('textures/', '', 1)
+                                        node_data['copied_texture'] = commit_path
+                                    if texture_info.get('original_path'):
+                                        node_data['image_file'] = texture_info['original_path']
+                    
                     # Update material.json with final texture info
                     mesh_storage_data['material_json'] = material_json
                     # Re-save mesh with updated texture info
                     with open(storage_path / "material.json", 'w', encoding='utf-8') as f:
                         json.dump(material_json, f, indent=2, ensure_ascii=False)
                 
-                # Add to database
+                # Add to database (only for new meshes)
                 import time
                 created_at = int(time.time())
                 db.add_mesh(
@@ -204,9 +230,45 @@ def create_mesh_only_commit(
                     created_at=created_at
                 )
             else:
-                # Mesh exists, but we still need to ensure textures are handled
+                # Mesh exists - load existing material.json and update node_data if needed
                 mesh_info = db.get_mesh(mesh_hash)
                 storage_path = Path(mesh_info['path'])
+                
+                # Load existing material.json
+                material_json_path = storage_path / "material.json"
+                if material_json_path.exists():
+                    with open(material_json_path, 'r', encoding='utf-8') as f:
+                        existing_material_json = json.load(f)
+                    
+                    # Update node_data for TEX_IMAGE nodes if textures are present
+                    if 'textures' in material_json and 'node_tree' in existing_material_json and 'nodes' in existing_material_json['node_tree']:
+                        # Build texture lookup by node_name
+                        texture_by_node = {}
+                        for tex_info in material_json['textures']:
+                            node_name = tex_info.get('node_name')
+                            if node_name:
+                                texture_by_node[node_name] = tex_info
+                        
+                        # Update TEX_IMAGE node_data with texture paths
+                        for node_data in existing_material_json['node_tree']['nodes']:
+                            if node_data.get('type') == 'TEX_IMAGE':
+                                node_name = node_data.get('name')
+                                texture_info = texture_by_node.get(node_name)
+                                
+                                if texture_info:
+                                    # Add copied_texture and image_file to node_data (like in difference_engine)
+                                    if texture_info.get('copied') and texture_info.get('commit_path'):
+                                        # Save only filename (remove "textures/" prefix if present)
+                                        commit_path = texture_info['commit_path']
+                                        if commit_path.startswith('textures/'):
+                                            commit_path = commit_path.replace('textures/', '', 1)
+                                        node_data['copied_texture'] = commit_path
+                                    if texture_info.get('original_path'):
+                                        node_data['image_file'] = texture_info['original_path']
+                        
+                        # Save updated material.json
+                        with open(material_json_path, 'w', encoding='utf-8') as f:
+                            json.dump(existing_material_json, f, indent=2, ensure_ascii=False)
             
             mesh_hashes.append(mesh_hash)
             selected_mesh_names.append(mesh_name)

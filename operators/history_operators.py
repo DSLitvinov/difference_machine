@@ -219,20 +219,32 @@ def import_mesh_to_blender(context, mesh_json, material_json, obj_name: str, mod
     # Import vertices
     if 'vertices' in mesh_json:
         vertices = [tuple(v) for v in mesh_json['vertices']]
-        # Import faces
+        
+        # Import faces - правильное создание полигонов
         faces = []
         if 'faces' in mesh_json:
+            # Преобразуем индексы вершин в правильный формат для from_pydata
             faces = [tuple(f) for f in mesh_json['faces']]
         
+        # Создаем меш из вершин и полигонов
         mesh.from_pydata(vertices, [], faces)
-    
-    # Import UV
-    if 'uv' in mesh_json and mesh.uv_layers:
-        uv_layer = mesh.uv_layers.active
-        if uv_layer and len(uv_layer.data) == len(mesh_json['uv']):
-            for i, uv_coord in enumerate(mesh_json['uv']):
-                if i < len(uv_layer.data):
-                    uv_layer.data[i].uv = tuple(uv_coord)
+        
+        # Обновляем нормали для корректного отображения
+        mesh.update()
+        
+        # Создаем UV слой если есть UV данные
+        if 'uv' in mesh_json and mesh_json['uv'] and len(mesh_json['uv']) > 0:
+            # Создаем UV слой если его нет
+            if not mesh.uv_layers:
+                mesh.uv_layers.new(name="UVMap")
+            
+            uv_layer = mesh.uv_layers.active
+            if uv_layer:
+                # Убедимся что количество UV координат соответствует количеству вершин в полигонах
+                for poly in mesh.polygons:
+                    for loop_index in poly.loop_indices:
+                        if loop_index < len(uv_layer.data) and loop_index < len(mesh_json['uv']):
+                            uv_layer.data[loop_index].uv = tuple(mesh_json['uv'][loop_index])
     
     # Import materials with textures
     if material_json and 'name' in material_json:
@@ -258,19 +270,16 @@ def import_mesh_to_blender(context, mesh_json, material_json, obj_name: str, mod
         if 'metallic' in material_json:
             mat.metallic = material_json['metallic']
         
-        # Restore node tree structure
+        # Restore node tree structure with textures loaded during node creation
         if mat.use_nodes and 'node_tree' in material_json and material_json['node_tree']:
-            import_node_tree_structure(mat.node_tree, material_json['node_tree'])
-            
-            # Load textures
-            if 'textures' in material_json and mesh_storage_path:
-                print(f"Calling load_textures_to_material with path: {mesh_storage_path}")
-                load_textures_to_material(mat, material_json['textures'], mesh_storage_path)
-            else:
-                print(f"Warning: No textures or no storage path. textures: {'textures' in material_json}, path: {mesh_storage_path}")
+            textures_info = material_json.get('textures', []) if 'textures' in material_json else None
+            import_node_tree_structure(mat.node_tree, material_json['node_tree'], 
+                                     textures_info=textures_info, 
+                                     mesh_storage_path=mesh_storage_path)
         
         mesh.materials.append(mat)
     
+    # Final mesh update
     mesh.update()
     
     if mode == 'NEW':
@@ -282,15 +291,42 @@ def import_mesh_to_blender(context, mesh_json, material_json, obj_name: str, mod
     return obj
 
 
-def import_node_tree_structure(node_tree, node_tree_data):
+def import_node_tree_structure(node_tree, node_tree_data, textures_info=None, mesh_storage_path=None):
     """
-    Импортирует структуру node tree без текстур.
+    Импортирует структуру node tree с загрузкой текстур.
+    
+    Args:
+        node_tree: Blender node tree
+        node_tree_data: Данные node tree из JSON
+        textures_info: Список информации о текстурах (опционально)
+        mesh_storage_path: Путь к директории меша для загрузки текстур (опционально)
     """
-    # Clear existing nodes
+    import os
+    import bpy
+    
+    # Check if node_tree is valid
+    if not node_tree:
+        print("Error: node_tree is None or invalid")
+        return
+    
+    # Clear existing nodes (like in difference_engine)
     node_tree.nodes.clear()
     
     # Track created nodes for linking
     created_nodes = {}
+    
+    # Build texture lookup map by node name
+    texture_map = {}
+    if textures_info and mesh_storage_path:
+        for tex_info in textures_info:
+            node_name = tex_info.get('node_name')
+            if node_name:
+                texture_map[node_name] = tex_info
+    
+    # Get textures directory
+    textures_dir = None
+    if mesh_storage_path:
+        textures_dir = mesh_storage_path / "textures"
     
     # Create nodes
     for node_data in node_tree_data.get('nodes', []):
@@ -318,7 +354,81 @@ def import_node_tree_structure(node_tree, node_tree_data):
                 if len(loc) >= 2:
                     node.location = (float(loc[0]), float(loc[1]))
             
-            # Set properties
+            # Handle image texture nodes FIRST (before other properties)
+            # Like in difference_engine: read texture data from node_data directly
+            if original_type == 'TEX_IMAGE' and textures_dir and textures_dir.exists():
+                # Build candidate paths (like in difference_engine)
+                candidate_paths = []
+                
+                # 1. Try copied_texture from node_data (primary method, like in difference_engine)
+                if 'copied_texture' in node_data:
+                    copied_tex = node_data['copied_texture']
+                    # Handle both cases: just filename or path with "textures/"
+                    if copied_tex.startswith('textures/'):
+                        # Remove "textures/" prefix and use just filename
+                        copied_tex = copied_tex.replace('textures/', '', 1)
+                    candidate_paths.append(os.path.join(str(textures_dir), copied_tex))
+                
+                # 2. Try texture_info from texture_map (for backward compatibility)
+                node_name = node_data.get('name', node.name)
+                texture_info = texture_map.get(node_name)
+                if texture_info:
+                    if texture_info.get('copied') and texture_info.get('commit_path'):
+                        candidate_paths.append(str(textures_dir / texture_info['commit_path']))
+                    if texture_info.get('original_path'):
+                        original_basename = os.path.basename(texture_info['original_path'])
+                        candidate_paths.append(str(textures_dir / original_basename))
+                
+                # 3. Try image_file from node_data (like in difference_engine)
+                if 'image_file' in node_data:
+                    candidate_paths.append(os.path.join(str(textures_dir), os.path.basename(node_data['image_file'])))
+                    candidate_paths.append(bpy.path.abspath(node_data['image_file']))
+                
+                # 4. Try original path from texture_info (for backward compatibility)
+                if texture_info and texture_info.get('original_path'):
+                    abs_path = bpy.path.abspath(texture_info['original_path'])
+                    candidate_paths.append(abs_path)
+                
+                # Resolve first existing path
+                resolved_path = None
+                for candidate in candidate_paths:
+                    if candidate and isinstance(candidate, str) and os.path.exists(candidate) and os.path.isfile(candidate):
+                        resolved_path = candidate
+                        break
+                
+                if not resolved_path:
+                    print(f"Warning: Texture not found for node '{node_name}'. Tried: {candidate_paths}")
+                else:
+                    try:
+                        file_size_mb = os.path.getsize(resolved_path) / (1024 * 1024)
+                        if file_size_mb > 50:
+                            print(f"Warning: Loading large texture: {os.path.basename(resolved_path)} ({file_size_mb:.1f} MB)")
+                        
+                        # Reuse cached image by filename when possible (like in difference_engine)
+                        cached_name = os.path.basename(resolved_path)
+                        image = bpy.data.images.get(cached_name)
+                        
+                        if image:
+                            print(f"Reusing cached texture: {cached_name}")
+                            image.filepath = resolved_path
+                            # Force reload to ensure up-to-date display (like in difference_engine)
+                            image.reload()
+                        else:
+                            image = bpy.data.images.load(resolved_path)
+                            print(f"Loaded new texture from {resolved_path}")
+                        
+                        # Assign image to node
+                        if hasattr(node, 'image'):
+                            node.image = image
+                            print(f"Assigned texture {cached_name} to node {node.name}")
+                        else:
+                            print(f"Error: Node {node.name} doesn't have 'image' attribute!")
+                    except Exception as e:
+                        print(f"Failed to load texture {resolved_path}: {e}")
+                        import traceback
+                        traceback.print_exc()
+            
+            # Set properties (AFTER image is loaded for TEX_IMAGE nodes)
             if 'properties' in node_data:
                 props = node_data['properties']
                 if 'operation' in props and hasattr(node, 'operation'):
