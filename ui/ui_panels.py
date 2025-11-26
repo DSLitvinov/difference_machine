@@ -311,11 +311,18 @@ class DF_PT_history_panel(Panel):
                     op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
                     op.commit_hash = commit.hash
                 else:
-                    # Для обычных коммитов - только Load и Delete
+                    # Для обычных коммитов - Load, Open project state и Delete
                     layout.separator()
                     row = layout.row()
                     row.scale_y = 1.2
                     op = row.operator("df.checkout_commit", text="Load Version", icon='IMPORT')
+                    op.commit_hash = commit.hash
+
+                    # Открыть состояние проекта из этого коммита
+                    layout.separator()
+                    row = layout.row()
+                    row.scale_y = 1.2
+                    op = row.operator("df.open_project_state", text="Open Project State from This Commit", icon='FILE_FOLDER')
                     op.commit_hash = commit.hash
                     
                     layout.separator()

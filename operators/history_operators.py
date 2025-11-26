@@ -57,7 +57,7 @@ class DF_OT_checkout_commit(Operator):
     """Checkout a specific commit."""
     bl_idname = "df.checkout_commit"
     bl_label = "Checkout Commit"
-    bl_description = "Checkout this commit (will discard uncommitted changes)"
+    bl_description = "Checkout this commit into the working directory (will discard uncommitted changes)"
     bl_options = {'REGISTER'}
 
     commit_hash: StringProperty(name="Commit Hash")
@@ -93,6 +93,67 @@ class DF_OT_checkout_commit(Operator):
                 return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {'CANCELLED'}
+
+
+class DF_OT_open_project_state(Operator):
+    """Checkout commit and open project .blend from its working state."""
+    bl_idname = "df.open_project_state"
+    bl_label = "Open Project State from This Commit"
+    bl_description = "Checkout this commit and open the corresponding .blend file from the working directory (unsaved changes will be lost)"
+    bl_options = {'REGISTER'}
+
+    commit_hash: StringProperty(name="Commit Hash")
+
+    def invoke(self, context, event):
+        """Show confirmation dialog before discarding current scene."""
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, context):
+        """Checkout commit and open the corresponding .blend file."""
+        # Current .blend file (to know project root and filename)
+        blend_file = Path(bpy.data.filepath)
+        if not blend_file:
+            self.report({'ERROR'}, "Please save the Blender file first")
+            return {'CANCELLED'}
+
+        # Find repository from project root
+        repo_path = find_repository(blend_file.parent)
+        if not repo_path:
+            self.report({'ERROR'}, "Not a Forester repository")
+            return {'CANCELLED'}
+
+        # Step 1: checkout commit into working directory
+        try:
+            success, error = checkout_commit(repo_path, self.commit_hash, force=True)
+
+            if not success:
+                self.report({'ERROR'}, f"Failed to checkout: {error}")
+                return {'CANCELLED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {'CANCELLED'}
+
+        # Step 2: locate target .blend in working directory
+        working_dir = repo_path / "working"
+        if not working_dir.exists():
+            working_dir = repo_path
+
+        target_blend = working_dir / blend_file.name
+        if not target_blend.exists():
+            self.report({'ERROR'}, f"Blend file '{blend_file.name}' not found in working directory after checkout")
+            return {'CANCELLED'}
+
+        # Step 3: open the .blend file (Blender will handle its own unsaved-changes prompt)
+        try:
+            bpy.ops.wm.open_mainfile(filepath=str(target_blend))
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to open .blend file: {str(e)}")
             import traceback
             traceback.print_exc()
             return {'CANCELLED'}
