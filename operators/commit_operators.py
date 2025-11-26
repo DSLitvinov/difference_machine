@@ -29,7 +29,7 @@ from forester.core.metadata import Metadata
 
 def export_mesh_to_json(obj, export_options):
     """
-    Export Blender mesh object to JSON format.
+    Export Blender mesh object to JSON format with texture tracking.
     
     Args:
         obj: Blender mesh object
@@ -63,18 +63,59 @@ def export_mesh_to_json(obj, export_options):
     if export_options.get('normals', True):
         mesh_json['normals'] = [[v.normal.x, v.normal.y, v.normal.z] for v in mesh.vertices]
     
-    # Materials
+    # Materials with texture tracking
     if export_options.get('materials', True) and obj.material_slots:
         if obj.material_slots[0].material:
             mat = obj.material_slots[0].material
             material_json = {
                 'name': mat.name,
                 'use_nodes': mat.use_nodes,
+                'diffuse_color': list(mat.diffuse_color[:4]),
+                'specular_color': list(mat.specular_color[:3]),
+                'roughness': float(mat.roughness),
+                'metallic': float(mat.metallic),
+                'textures': []  # Список текстур с путями и хешами
             }
+            
             if mat.use_nodes and mat.node_tree:
-                # Basic material properties
-                material_json['base_color'] = [1.0, 1.0, 1.0, 1.0]  # Default
-                # TODO: Extract actual material properties from node tree
+                # Собираем все текстуры из node tree
+                textures = []
+                for node in mat.node_tree.nodes:
+                    if node.type == 'TEX_IMAGE' and node.image:
+                        texture_info = {
+                            'node_name': node.name,
+                            'image_name': node.image.name,
+                            'original_path': node.image.filepath,
+                            'file_hash': None,  # Будет вычислен при создании коммита
+                            'copied': False,  # Будет установлено при создании коммита
+                            'commit_path': None  # Путь к текстуре в коммите (если скопирована)
+                        }
+                        
+                        # Вычисляем хеш файла текстуры
+                        if node.image.filepath:
+                            import os
+                            from pathlib import Path
+                            abs_path = bpy.path.abspath(node.image.filepath)
+                            if os.path.exists(abs_path):
+                                from forester.core.hashing import compute_file_hash
+                                try:
+                                    texture_info['file_hash'] = compute_file_hash(Path(abs_path))
+                                except Exception:
+                                    pass  # Не удалось вычислить хеш
+                        
+                        # Если текстура упакована в blend файл
+                        if node.image.packed_file:
+                            texture_info['is_packed'] = True
+                            texture_info['packed_size'] = len(node.image.packed_file.data)
+                        else:
+                            texture_info['is_packed'] = False
+                        
+                        textures.append(texture_info)
+                
+                material_json['textures'] = textures
+                
+                # Экспортируем полную структуру node tree (без текстур, только структура)
+                material_json['node_tree'] = export_node_tree_structure(mat.node_tree)
     
     # Metadata
     mesh_json['metadata'] = {
@@ -87,6 +128,99 @@ def export_mesh_to_json(obj, export_options):
         'mesh_json': mesh_json,
         'material_json': material_json,
     }
+
+
+def export_node_tree_structure(node_tree):
+    """
+    Экспортирует структуру node tree без текстур (только связи и параметры).
+    """
+    nodes_data = []
+    links_data = []
+    
+    for node in node_tree.nodes:
+        # Пропускаем TEX_IMAGE узлы - они обрабатываются отдельно
+        if node.type == 'TEX_IMAGE':
+            # Сохраняем только базовую информацию о узле
+            node_data = {
+                'name': node.name,
+                'type': node.type,
+                'location': [float(node.location.x), float(node.location.y)],
+                'inputs': [],
+                'properties': {}
+            }
+            # Для TEX_IMAGE сохраняем только свойства, не значения
+            if hasattr(node, 'interpolation'):
+                node_data['properties']['interpolation'] = node.interpolation
+            if hasattr(node, 'extension'):
+                node_data['properties']['extension'] = node.extension
+            if hasattr(node, 'color_space'):
+                node_data['properties']['color_space'] = node.color_space
+            nodes_data.append(node_data)
+            continue
+        
+        node_data = {
+            'name': node.name,
+            'type': node.type,
+            'location': [float(node.location.x), float(node.location.y)],
+            'inputs': [],
+            'properties': {}
+        }
+        
+        # Экспортируем входы
+        for input_socket in node.inputs:
+            input_data = {
+                'name': input_socket.name,
+                'type': input_socket.type,
+                'default_value': get_socket_default_value(input_socket)
+            }
+            node_data['inputs'].append(input_data)
+        
+        # Экспортируем свойства
+        if hasattr(node, 'operation'):
+            node_data['properties']['operation'] = node.operation
+        if hasattr(node, 'blend_type'):
+            node_data['properties']['blend_type'] = node.blend_type
+        if hasattr(node, 'label'):
+            node_data['properties']['label'] = node.label
+        if hasattr(node, 'hide'):
+            node_data['properties']['hide'] = node.hide
+        if hasattr(node, 'mute'):
+            node_data['properties']['mute'] = node.mute
+        
+        nodes_data.append(node_data)
+    
+    # Экспортируем связи
+    for link in node_tree.links:
+        links_data.append({
+            'from_node': link.from_node.name,
+            'from_socket': link.from_socket.name,
+            'to_node': link.to_node.name,
+            'to_socket': link.to_socket.name
+        })
+    
+    return {
+        'nodes': nodes_data,
+        'links': links_data
+    }
+
+
+def get_socket_default_value(socket):
+    """
+    Получает значение по умолчанию из сокета, конвертируя в JSON-совместимый формат.
+    """
+    try:
+        default_val = getattr(socket, 'default_value', None)
+        if default_val is None:
+            return None
+        
+        # Конвертируем в список для векторов, цветов и т.д.
+        if hasattr(default_val, '__len__') and not isinstance(default_val, str):
+            return [float(v) for v in default_val]
+        else:
+            # Одиночное значение (float, int, bool)
+            return float(default_val) if isinstance(default_val, (int, float)) else default_val
+    except Exception:
+        return None
 
 
 class DF_OT_create_project_commit(Operator):

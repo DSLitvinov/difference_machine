@@ -73,11 +73,61 @@ def create_mesh_only_commit(
         mesh_hashes = []
         selected_mesh_names = []
         
+        # Get previous commit for texture comparison
+        previous_textures_map = {}
+        if parent_hash:
+            parent_commit = Commit.from_storage(parent_hash, db, storage)
+            if parent_commit and parent_commit.mesh_hashes:
+                # Build map of textures from previous commit
+                for prev_mesh_hash in parent_commit.mesh_hashes:
+                    prev_mesh = Mesh.from_storage(prev_mesh_hash, db, storage)
+                    if prev_mesh and prev_mesh.material_json.get('textures'):
+                        for tex in prev_mesh.material_json['textures']:
+                            # Use image_name as key for comparison
+                            key = tex.get('image_name') or tex.get('node_name', '')
+                            if key:
+                                previous_textures_map[key] = tex
+        
         # Process each mesh
         for mesh_data in mesh_data_list:
             mesh_name = mesh_data['mesh_name']
             mesh_json = mesh_data['mesh_json']
             material_json = mesh_data.get('material_json', {})
+            
+            # Process textures - copy only changed ones
+            if material_json and 'textures' in material_json:
+                # Get storage path for this mesh (will be created later)
+                # We need to process textures before creating mesh hash
+                textures = material_json['textures']
+                processed_textures = []
+                
+                for texture_info in textures:
+                    image_name = texture_info.get('image_name', '')
+                    current_hash = texture_info.get('file_hash')
+                    
+                    # Check if texture changed
+                    needs_copy = True
+                    if image_name in previous_textures_map:
+                        prev_tex = previous_textures_map[image_name]
+                        prev_hash = prev_tex.get('file_hash')
+                        
+                        if prev_hash and current_hash and prev_hash == current_hash:
+                            # Texture unchanged - use reference
+                            needs_copy = False
+                            texture_info['copied'] = False
+                            texture_info['commit_path'] = prev_tex.get('commit_path')
+                            # Keep original_path from previous if available
+                            if prev_tex.get('original_path'):
+                                texture_info['original_path'] = prev_tex['original_path']
+                    
+                    if needs_copy and current_hash:
+                        # Mark for copying (will be done after we know storage path)
+                        texture_info['copied'] = True
+                        texture_info['needs_copy'] = True
+                    
+                    processed_textures.append(texture_info)
+                
+                material_json['textures'] = processed_textures
             
             # Filter mesh_json based on export_options
             filtered_mesh_json = filter_mesh_data(mesh_json, export_options)
@@ -99,6 +149,50 @@ def create_mesh_only_commit(
                 }
                 storage_path = storage.save_mesh(mesh_storage_data, mesh_hash)
                 
+                # Copy textures that need copying
+                if material_json and 'textures' in material_json:
+                    textures_dir = storage_path / "textures"
+                    textures_dir.mkdir(exist_ok=True)
+                    
+                    import shutil
+                    import os
+                    
+                    for texture_info in material_json['textures']:
+                        if texture_info.get('needs_copy'):
+                            # Copy texture file
+                            original_path = texture_info.get('original_path')
+                            if original_path:
+                                # Convert relative path to absolute
+                                if not os.path.isabs(original_path):
+                                    # Try to resolve relative to working directory
+                                    abs_path = (working_dir / original_path).resolve()
+                                else:
+                                    abs_path = Path(original_path)
+                                
+                                if abs_path.exists() and abs_path.is_file():
+                                    texture_filename = abs_path.name
+                                    dest_path = textures_dir / texture_filename
+                                    shutil.copy2(abs_path, dest_path)
+                                    texture_info['commit_path'] = f"textures/{texture_filename}"
+                                    texture_info['copied'] = True
+                            
+                            # Handle packed textures
+                            elif texture_info.get('is_packed'):
+                                # Packed textures need to be saved from Blender object
+                                # This should be handled in the operator that calls this function
+                                # For now, we'll skip packed textures in commit
+                                texture_info['copied'] = False
+                                texture_info['commit_path'] = None
+                            
+                            # Remove temporary flag
+                            texture_info.pop('needs_copy', None)
+                    
+                    # Update material.json with final texture info
+                    mesh_storage_data['material_json'] = material_json
+                    # Re-save mesh with updated texture info
+                    with open(storage_path / "material.json", 'w', encoding='utf-8') as f:
+                        json.dump(material_json, f, indent=2, ensure_ascii=False)
+                
                 # Add to database
                 import time
                 created_at = int(time.time())
@@ -109,6 +203,10 @@ def create_mesh_only_commit(
                     material_json_path=str(storage_path / "material.json"),
                     created_at=created_at
                 )
+            else:
+                # Mesh exists, but we still need to ensure textures are handled
+                mesh_info = db.get_mesh(mesh_hash)
+                storage_path = Path(mesh_info['path'])
             
             mesh_hashes.append(mesh_hash)
             selected_mesh_names.append(mesh_name)

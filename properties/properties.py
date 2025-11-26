@@ -198,6 +198,22 @@ def register():
     # Index properties for UIList
     bpy.types.Scene.df_branch_list_index = bpy.props.IntProperty(name="Branch List Index", default=0)
     bpy.types.Scene.df_commit_list_index = bpy.props.IntProperty(name="Commit List Index", default=0)
+    
+    # Comparison state (for mesh comparison)
+    bpy.types.Scene.df_comparison_active = bpy.props.BoolProperty(
+        name="Comparison Active",
+        default=False,
+    )
+    
+    bpy.types.Scene.df_comparison_object_name = bpy.props.StringProperty(
+        name="Comparison Object Name",
+        default="",
+    )
+    
+    bpy.types.Scene.df_original_object_name = bpy.props.StringProperty(
+        name="Original Object Name",
+        default="",
+    )
 
 
 def unregister():
@@ -232,6 +248,25 @@ def unregister():
     if hasattr(bpy.types.Scene, 'df_commit_props'):
         try:
             del bpy.types.Scene.df_commit_props
+        except:
+            pass
+    
+    # Unregister comparison properties
+    if hasattr(bpy.types.Scene, 'df_comparison_active'):
+        try:
+            del bpy.types.Scene.df_comparison_active
+        except:
+            pass
+    
+    if hasattr(bpy.types.Scene, 'df_comparison_object_name'):
+        try:
+            del bpy.types.Scene.df_comparison_object_name
+        except:
+            pass
+    
+    if hasattr(bpy.types.Scene, 'df_original_object_name'):
+        try:
+            del bpy.types.Scene.df_original_object_name
         except:
             pass
     

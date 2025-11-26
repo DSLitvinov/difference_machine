@@ -190,19 +190,55 @@ class DF_PT_history_panel(Panel):
                 
                 # Action buttons - для mesh_only коммитов показываем Replace и Compare
                 if commit.commit_type == "mesh_only":
-                    # Replace и Compare в одной строке
-                    layout.separator()
-                    row = layout.row(align=True)
-                    row.scale_y = 1.5
-                    op = row.operator("df.replace_mesh", text="Replace", icon='FILE_REFRESH')
-                    op.commit_hash = commit.hash
-                    op = row.operator("df.compare_mesh", text="Compare", icon='SPLIT_HORIZONTAL')
-                    op.commit_hash = commit.hash
+                    # Проверка: показываем кнопки только если выбранный объект есть в коммите
+                    active_obj = context.active_object
+                    mesh_names_str = commit.selected_mesh_names or ""
+                    
+                    # Парсим selected_mesh_names (может быть JSON строка или обычная строка)
+                    try:
+                        import json
+                        if mesh_names_str.startswith('['):
+                            mesh_names = json.loads(mesh_names_str)
+                        else:
+                            # Если это строка с запятыми
+                            mesh_names = [name.strip() for name in mesh_names_str.split(',') if name.strip()]
+                    except:
+                        mesh_names = [mesh_names_str] if mesh_names_str else []
+                    
+                    # Проверяем, есть ли активный объект в списке мешей коммита
+                    show_buttons = False
+                    if active_obj and active_obj.type == 'MESH' and active_obj.name in mesh_names:
+                        show_buttons = True
+                    
+                    if show_buttons:
+                        # Replace и Compare в одной строке
+                        layout.separator()
+                        row = layout.row(align=True)
+                        row.scale_y = 1.5
+                        op = row.operator("df.replace_mesh", text="Replace", icon='FILE_REFRESH')
+                        op.commit_hash = commit.hash
+                        
+                        # Compare button with pressed state
+                        is_comparison_active = getattr(context.scene, 'df_comparison_active', False)
+                        op = row.operator("df.compare_mesh", text="Compare", icon='SPLIT_HORIZONTAL', depress=is_comparison_active)
+                        op.commit_hash = commit.hash
+                    else:
+                        # Показываем сообщение, если объект не выбран или не совпадает
+                        layout.separator()
+                        box = layout.box()
+                        if not active_obj or active_obj.type != 'MESH':
+                            box.label(text="Select a mesh object to load/replace", icon='INFO')
+                        elif mesh_names:
+                            box.label(text=f"Select one of: {', '.join(mesh_names)}", icon='INFO')
+                        else:
+                            box.label(text="No meshes in this commit", icon='INFO')
                     
                     # Load и Delete отдельно, каждая в своей строке
                     layout.separator()
                     row = layout.row()
                     row.scale_y = 1.2
+                    # Load создает новый объект, поэтому не требует выбора конкретного меша
+                    # Используем checkout_commit для mesh_only коммитов
                     op = row.operator("df.checkout_commit", text="Load Version", icon='IMPORT')
                     op.commit_hash = commit.hash
                     
