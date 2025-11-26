@@ -137,3 +137,43 @@ class DF_OT_delete_commit(Operator):
             traceback.print_exc()
             return {'CANCELLED'}
 
+
+class DF_OT_replace_mesh(Operator):
+    """Replace current mesh with version from commit."""
+    bl_idname = "df.replace_mesh"
+    bl_label = "Replace Mesh"
+    bl_description = "Replace current mesh with version from this commit"
+    bl_options = {'REGISTER'}
+
+    commit_hash: StringProperty(name="Commit Hash")
+
+    def invoke(self, context, event):
+        """Invoke with confirmation dialog."""
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, context):
+        """Execute the operator."""
+        # TODO: Implement mesh replacement logic
+        # 1. Load mesh from commit
+        # 2. Replace current active object's mesh data
+        self.report({'INFO'}, f"Replace mesh from commit: {self.commit_hash[:16]}... (not implemented yet)")
+        return {'FINISHED'}
+
+
+class DF_OT_compare_mesh(Operator):
+    """Compare current mesh with version from commit."""
+    bl_idname = "df.compare_mesh"
+    bl_label = "Compare Mesh"
+    bl_description = "Compare current mesh with version from this commit"
+    bl_options = {'REGISTER'}
+
+    commit_hash: StringProperty(name="Commit Hash")
+
+    def execute(self, context):
+        """Execute the operator."""
+        # TODO: Implement mesh comparison logic
+        # 1. Load mesh from commit
+        # 2. Show differences (geometry, materials, UV, etc.)
+        self.report({'INFO'}, f"Compare mesh with commit: {self.commit_hash[:16]}... (not implemented yet)")
+        return {'FINISHED'}
+

@@ -132,7 +132,7 @@ class DF_PT_commit_panel(Panel):
 
 class DF_PT_history_panel(Panel):
     """Panel for viewing commit history."""
-    bl_label = "Version History"
+    bl_label = "Load Commit"
     bl_idname = "DF_PT_history_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -188,12 +188,42 @@ class DF_PT_history_panel(Panel):
                 box.label(text=f"Author: {commit.author}")
                 box.label(text=f"Hash: {commit.hash[:16]}...")
                 
-                # Action buttons
-                row = box.row(align=True)
-                op = row.operator("df.checkout_commit", text="Load", icon='IMPORT')
-                op.commit_hash = commit.hash
-                op = row.operator("df.delete_commit", text="Delete", icon='TRASH')
-                op.commit_hash = commit.hash
+                # Action buttons - для mesh_only коммитов показываем Replace и Compare
+                if commit.commit_type == "mesh_only":
+                    # Replace и Compare в одной строке
+                    layout.separator()
+                    row = layout.row(align=True)
+                    row.scale_y = 1.5
+                    op = row.operator("df.replace_mesh", text="Replace", icon='FILE_REFRESH')
+                    op.commit_hash = commit.hash
+                    op = row.operator("df.compare_mesh", text="Compare", icon='SPLIT_HORIZONTAL')
+                    op.commit_hash = commit.hash
+                    
+                    # Load и Delete отдельно, каждая в своей строке
+                    layout.separator()
+                    row = layout.row()
+                    row.scale_y = 1.2
+                    op = row.operator("df.checkout_commit", text="Load Version", icon='IMPORT')
+                    op.commit_hash = commit.hash
+                    
+                    layout.separator()
+                    row = layout.row()
+                    row.scale_y = 1.2
+                    op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
+                    op.commit_hash = commit.hash
+                else:
+                    # Для обычных коммитов - только Load и Delete
+                    layout.separator()
+                    row = layout.row()
+                    row.scale_y = 1.2
+                    op = row.operator("df.checkout_commit", text="Load Version", icon='IMPORT')
+                    op.commit_hash = commit.hash
+                    
+                    layout.separator()
+                    row = layout.row()
+                    row.scale_y = 1.2
+                    op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
+                    op.commit_hash = commit.hash
 
 
 class DF_PT_branch_panel(Panel):

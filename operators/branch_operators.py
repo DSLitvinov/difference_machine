@@ -47,3 +47,5 @@ class DF_OT_sort_branches(Operator):
         self.report({'INFO'}, f"Branches sorted by {self.sort_type}")
         return {'FINISHED'}
 
+
+

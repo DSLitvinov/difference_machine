@@ -25,6 +25,8 @@ from ..operators.history_operators import (
     DF_OT_select_commit,
     DF_OT_checkout_commit,
     DF_OT_delete_commit,
+    DF_OT_replace_mesh,
+    DF_OT_compare_mesh,
 )
 from ..operators.branch_operators import (
     DF_OT_sort_branches,
@@ -53,6 +55,8 @@ classes = [
     DF_OT_select_commit,
     DF_OT_checkout_commit,
     DF_OT_delete_commit,
+    DF_OT_replace_mesh,
+    DF_OT_compare_mesh,
     # Branch operators
     DF_OT_sort_branches,
     # Export operators

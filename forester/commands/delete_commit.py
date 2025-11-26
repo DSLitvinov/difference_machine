@@ -84,3 +84,5 @@ def delete_commit(repo_path: Path, commit_hash: str, force: bool = False) -> Tup
     finally:
         db.close()
 
+
+

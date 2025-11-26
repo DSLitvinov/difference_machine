@@ -126,3 +126,5 @@ def get_current_head_commit(repo_path: Path) -> Optional[str]:
     return get_branch_ref(repo_path, branch)
 
 
+
+

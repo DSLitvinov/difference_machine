@@ -239,3 +239,5 @@ def has_uncommitted_changes(repo_path: Path) -> bool:
         return current_tree.hash != tree.hash
 
 
+
+
