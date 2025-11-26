@@ -11,10 +11,13 @@ from ..forester.commands import find_repository
 def get_addon_preferences(context):
     """Get addon preferences with fallback to default values."""
     try:
-        addon = context.preferences.addons.get('difference_machine')
+        # Get addon ID from the preferences module
+        from .. import preferences
+        addon_id = preferences.DifferenceMachinePreferences.bl_idname
+        addon = context.preferences.addons.get(addon_id)
         if addon and hasattr(addon, 'preferences'):
             return addon.preferences
-    except (KeyError, AttributeError):
+    except (KeyError, AttributeError, ImportError):
         pass
     
     # Fallback: return a simple object with default values

@@ -11,14 +11,17 @@ bl_info = {
 
 from .ui import ui_main
 from .properties import properties
+from . import preferences
 
 def register():
+    preferences.register()
     properties.register()
     ui_main.register()
 
 def unregister():
     ui_main.unregister()
     properties.unregister()
+    preferences.unregister()
 
 if __name__ == "__main__":
     register()
