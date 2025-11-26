@@ -163,6 +163,7 @@ class Commit:
         commit_info = db.get_commit(commit_hash)
         if commit_info:
             # Load full data from storage if available
+            commit_data = None
             try:
                 commit_data = storage.load_commit(commit_hash)
                 mesh_hashes = commit_data.get('mesh_hashes', [])

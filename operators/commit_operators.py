@@ -184,8 +184,7 @@ class DF_OT_create_mesh_commit(Operator):
                 mesh_data_list=mesh_data_list,
                 export_options=export_options,
                 message=props.message or "No message",
-                author=props.author if props.author else "Unknown",
-                tag=props.tag if props.tag else None
+                author=props.author if props.author else "Unknown"
             )
             
             if commit_hash:
@@ -470,6 +469,20 @@ class DF_OT_delete_branch(Operator):
         repo_path = find_repository(blend_file.parent)
         if not repo_path:
             self.report({'ERROR'}, "Not a Forester repository")
+            return {'CANCELLED'}
+        
+        # Check if this is the last branch
+        from forester.commands import list_branches
+        branches = list_branches(repo_path)
+        if len(branches) <= 1:
+            self.report({'ERROR'}, "Cannot delete the last branch")
+            return {'CANCELLED'}
+        
+        # Check if this is the current branch
+        from forester.core.refs import get_current_branch
+        current_branch = get_current_branch(repo_path)
+        if self.branch_name == current_branch:
+            self.report({'ERROR'}, f"Cannot delete current branch '{self.branch_name}'. Switch to another branch first.")
             return {'CANCELLED'}
         
         try:

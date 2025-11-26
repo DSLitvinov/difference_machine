@@ -105,11 +105,6 @@ class DF_PT_commit_panel(Panel):
         row.label(text="Branch:")
         row.prop(props, "branch", text="")
         
-        # Tag
-        row = layout.row()
-        row.label(text="Tag:")
-        row.prop(props, "tag", text="")
-        
         # Message
         layout.prop(props, "message", text="Message")
         
@@ -187,11 +182,26 @@ class DF_PT_branch_panel(Panel):
             scene.df_branch_list_index >= 0 and 
             scene.df_branch_list_index < len(branches)):
             layout.separator()
-            row = layout.row()
-            row.scale_y = 1.2
             selected_branch = branches[scene.df_branch_list_index]
+            
+            # Disable delete button if:
+            # 1. Only one branch exists (cannot delete the last branch)
+            # 2. Selected branch is the current branch (cannot delete current branch)
+            can_delete = len(branches) > 1 and not selected_branch.is_current
+            
+            row = layout.row()
+            row.enabled = can_delete
+            row.scale_y = 1.2
             op = row.operator("df.delete_branch", text="Delete Branch", icon='TRASH')
             op.branch_name = selected_branch.name
+            
+            if not can_delete:
+                layout.separator()
+                info_row = layout.row()
+                if len(branches) <= 1:
+                    info_row.label(text="Cannot delete the last branch", icon='INFO')
+                elif selected_branch.is_current:
+                    info_row.label(text="Cannot delete current branch", icon='INFO')
 
 class DF_PT_history_panel(Panel):
     """Panel for viewing commit history."""
@@ -296,28 +306,14 @@ class DF_PT_history_panel(Panel):
                         else:
                             box.label(text="No meshes in this commit", icon='INFO')
                     
-                    # Load и Delete отдельно, каждая в своей строке
-                    layout.separator()
-                    row = layout.row()
-                    row.scale_y = 1.2
-                    # Load создает новый объект, поэтому не требует выбора конкретного меша
-                    # Используем checkout_commit для mesh_only коммитов
-                    op = row.operator("df.checkout_commit", text="Load Version", icon='IMPORT')
-                    op.commit_hash = commit.hash
-                    
+                    # Delete button
                     layout.separator()
                     row = layout.row()
                     row.scale_y = 1.2
                     op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
                     op.commit_hash = commit.hash
                 else:
-                    # Для обычных коммитов - Load, Open project state и Delete
-                    layout.separator()
-                    row = layout.row()
-                    row.scale_y = 1.2
-                    op = row.operator("df.checkout_commit", text="Load Version", icon='IMPORT')
-                    op.commit_hash = commit.hash
-
+                    # Для обычных коммитов - Open project state и Delete
                     # Открыть состояние проекта из этого коммита
                     layout.separator()
                     row = layout.row()

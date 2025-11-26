@@ -40,13 +40,6 @@ class DFCommitProperties(bpy.types.PropertyGroup):
         default="",
     )
     
-    # Tag
-    tag: StringProperty(
-        name="Tag",
-        description="Optional tag for the commit",
-        default="",
-    )
-    
     # Author
     author: StringProperty(
         name="Author",

@@ -24,7 +24,9 @@ class DF_UL_branch_list(UIList):
             
             # Commit count
             if item.commit_count > 0:
-                layout.label(text=f"{item.commit_count} co...")
+                # Use proper pluralization
+                commit_text = "commit" if item.commit_count == 1 else "commits"
+                layout.label(text=f"{item.commit_count} {commit_text}")
             else:
                 layout.label(text="0 commits")
             
@@ -50,23 +52,30 @@ class DF_UL_commit_list(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         """Draw a single commit item."""
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            # Format: message + author + date time
+            import datetime
+            
+            # Get date time
+            try:
+                date_str = datetime.datetime.fromtimestamp(item.timestamp).strftime('%Y-%m-%d %H:%M')
+            except:
+                date_str = "Unknown"
+            
+            # Format message (truncate if too long to fit in UI)
+            message_text = item.message[:30] + "..." if len(item.message) > 30 else item.message
+            
+            # Build full text: message + author + date time
+            # Format: "Message | Author | Date Time"
+            full_text = f"{message_text} | {item.author} | {date_str}"
+            
             # Commit type indicator
             if item.commit_type == "mesh_only":
                 layout.label(text="", icon='MESH_DATA')
             else:
                 layout.label(text="", icon='FILE_FOLDER')
             
-            # Date and message
-            import datetime
-            try:
-                date_str = datetime.datetime.fromtimestamp(item.timestamp).strftime('%Y-%m-%d %H:%M')
-            except:
-                date_str = "Unknown"
-            
-            layout.label(text=f"{date_str}  {item.message[:40]}", icon='FILE')
-            
-            # Author
-            layout.label(text=item.author, icon='USER')
+            # Display full text
+            layout.label(text=full_text, icon='FILE')
         
         elif self.layout_type in {'GRID'}:
             layout.alignment = 'CENTER'

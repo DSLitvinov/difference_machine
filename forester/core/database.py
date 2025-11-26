@@ -67,7 +67,8 @@ class ForesterDB:
                 author TEXT,
                 commit_type TEXT DEFAULT 'project',
                 selected_mesh_names TEXT,
-                export_options TEXT
+                export_options TEXT,
+                tag TEXT
             )
         """)
         
@@ -84,6 +85,11 @@ class ForesterDB:
         
         try:
             cursor.execute("ALTER TABLE commits ADD COLUMN export_options TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        try:
+            cursor.execute("ALTER TABLE commits ADD COLUMN tag TEXT")
         except sqlite3.OperationalError:
             pass  # Column already exists
         
@@ -173,11 +179,28 @@ class ForesterDB:
         
         cursor.execute("""
             INSERT INTO commits (hash, branch, parent_hash, timestamp, message, tree_hash, author,
-                                commit_type, selected_mesh_names, export_options)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                commit_type, selected_mesh_names, export_options, tag)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (commit_hash, branch, parent_hash, timestamp, message, tree_hash, author,
-              commit_type, selected_mesh_names_json, export_options_json))
+              commit_type, selected_mesh_names_json, export_options_json, None))
         self.conn.commit()
+    
+    def _ensure_tag_column(self) -> None:
+        """Ensure tag column exists in commits table."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        # Check if tag column exists
+        cursor.execute("PRAGMA table_info(commits)")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        if 'tag' not in columns:
+            try:
+                cursor.execute("ALTER TABLE commits ADD COLUMN tag TEXT")
+                self.conn.commit()
+            except sqlite3.OperationalError:
+                pass  # Column might have been added by another process
     
     def get_commit(self, commit_hash: str) -> Optional[Dict[str, Any]]:
         """Get commit by hash."""

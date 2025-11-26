@@ -25,8 +25,6 @@ from .mesh_io import (
     import_node_tree_structure,
 )
 from .operator_helpers import get_repository_path, get_active_mesh_object
-
-
 class DF_OT_select_commit(Operator):
     """Select a commit in the history list."""
     bl_idname = "df.select_commit"
