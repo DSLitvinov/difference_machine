@@ -13,7 +13,7 @@ class DF_PT_commit_panel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Difference Machine"
-    bl_order = 1
+    bl_order = 2
 
     def draw(self, context):
         """Draw the panel UI."""
@@ -130,6 +130,69 @@ class DF_PT_commit_panel(Panel):
             layout.operator("df.create_project_commit", text="Create Commit", icon='EXPORT')
 
 
+
+class DF_PT_branch_panel(Panel):
+    """Panel for branch management."""
+    bl_label = "Branch Management"
+    bl_idname = "DF_PT_branch_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Difference Machine"
+    bl_order = 1
+
+    def draw(self, context):
+        """Draw the panel UI."""
+        layout = self.layout
+        scene = context.scene
+        props = context.scene.df_commit_props
+        
+        # Refresh button
+        row = layout.row()
+        row.operator("df.refresh_branches", text="Refresh Branches", icon='FILE_REFRESH')
+        
+        # Auto-refresh if list is empty and file is saved
+        branches = scene.df_branches
+        if len(branches) == 0 and bpy.data.filepath:
+            # Try to auto-load
+            try:
+                bpy.ops.df.refresh_branches()
+            except:
+                pass
+        
+        # List branches using UIList
+        if len(branches) == 0:
+            box = layout.box()
+            box.label(text="No branches found", icon='INFO')
+            box.label(text="Click Refresh to load")
+        else:
+            # UIList for branches (stretchable)
+            row = layout.row()
+            row.template_list(
+                "DF_UL_branch_list", "",
+                scene, "df_branches",
+                scene, "df_branch_list_index",
+                rows=6  # Default 6 rows, stretchable
+            )
+        
+        # Branch operations
+        layout.separator()
+        
+        col = layout.column(align=True)
+        col.operator("df.create_branch", text="Create New Branch", icon='ADD')
+        col.operator("df.switch_branch", text="Switch Branch", icon='ARROW_LEFTRIGHT')
+        
+        # Delete branch button (only if branch is selected)
+        if (branches and 
+            hasattr(scene, 'df_branch_list_index') and
+            scene.df_branch_list_index >= 0 and 
+            scene.df_branch_list_index < len(branches)):
+            layout.separator()
+            row = layout.row()
+            row.scale_y = 1.2
+            selected_branch = branches[scene.df_branch_list_index]
+            op = row.operator("df.delete_branch", text="Delete Branch", icon='TRASH')
+            op.branch_name = selected_branch.name
+
 class DF_PT_history_panel(Panel):
     """Panel for viewing commit history."""
     bl_label = "Load Commit"
@@ -137,7 +200,7 @@ class DF_PT_history_panel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Difference Machine"
-    bl_order = 2
+    bl_order = 3
 
     def draw(self, context):
         """Draw the panel UI."""
@@ -215,7 +278,7 @@ class DF_PT_history_panel(Panel):
                         layout.separator()
                         row = layout.row(align=True)
                         row.scale_y = 1.5
-                        op = row.operator("df.replace_mesh", text="Replace", icon='FILE_REFRESH')
+                        op = row.operator("df.replace_mesh", text="Replace This Mesh", icon='FILE_REFRESH')
                         op.commit_hash = commit.hash
                         
                         # Compare button with pressed state
@@ -260,66 +323,3 @@ class DF_PT_history_panel(Panel):
                     row.scale_y = 1.2
                     op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
                     op.commit_hash = commit.hash
-
-
-class DF_PT_branch_panel(Panel):
-    """Panel for branch management."""
-    bl_label = "Branch Management"
-    bl_idname = "DF_PT_branch_panel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "Difference Machine"
-    bl_order = 3
-
-    def draw(self, context):
-        """Draw the panel UI."""
-        layout = self.layout
-        scene = context.scene
-        props = context.scene.df_commit_props
-        
-        # Refresh button
-        row = layout.row()
-        row.operator("df.refresh_branches", text="Refresh Branches", icon='FILE_REFRESH')
-        
-        # Auto-refresh if list is empty and file is saved
-        branches = scene.df_branches
-        if len(branches) == 0 and bpy.data.filepath:
-            # Try to auto-load
-            try:
-                bpy.ops.df.refresh_branches()
-            except:
-                pass
-        
-        # List branches using UIList
-        if len(branches) == 0:
-            box = layout.box()
-            box.label(text="No branches found", icon='INFO')
-            box.label(text="Click Refresh to load")
-        else:
-            # UIList for branches (stretchable)
-            row = layout.row()
-            row.template_list(
-                "DF_UL_branch_list", "",
-                scene, "df_branches",
-                scene, "df_branch_list_index",
-                rows=6  # Default 6 rows, stretchable
-            )
-        
-        # Branch operations
-        layout.separator()
-        
-        col = layout.column(align=True)
-        col.operator("df.create_branch", text="Create New Branch", icon='ADD')
-        col.operator("df.switch_branch", text="Switch Branch", icon='ARROW_LEFTRIGHT')
-        
-        # Delete branch button (only if branch is selected)
-        if (branches and 
-            hasattr(scene, 'df_branch_list_index') and
-            scene.df_branch_list_index >= 0 and 
-            scene.df_branch_list_index < len(branches)):
-            layout.separator()
-            row = layout.row()
-            row.scale_y = 1.2
-            selected_branch = branches[scene.df_branch_list_index]
-            op = row.operator("df.delete_branch", text="Delete Branch", icon='TRASH')
-            op.branch_name = selected_branch.name
