@@ -29,6 +29,7 @@ from ..operators.history_operators import (
     DF_OT_compare_mesh,
     DF_OT_load_mesh_version,
     DF_OT_open_project_state,
+    DF_OT_compare_project,
     DF_OT_switch_comparison_axis,
 )
 from ..operators.branch_operators import (
@@ -62,6 +63,7 @@ classes = [
     DF_OT_compare_mesh,
     DF_OT_load_mesh_version,
     DF_OT_open_project_state,
+    DF_OT_compare_project,
     DF_OT_switch_comparison_axis,
     # Branch operators
     DF_OT_sort_branches,

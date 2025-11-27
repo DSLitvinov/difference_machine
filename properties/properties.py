@@ -223,6 +223,22 @@ def register():
         ],
         default='X',
     )
+    
+    # Project comparison state
+    bpy.types.Scene.df_project_comparison_active = bpy.props.BoolProperty(
+        name="Project Comparison Active",
+        default=False,
+    )
+    
+    bpy.types.Scene.df_project_comparison_commit_hash = bpy.props.StringProperty(
+        name="Project Comparison Commit Hash",
+        default="",
+    )
+    
+    bpy.types.Scene.df_project_comparison_temp_dir = bpy.props.StringProperty(
+        name="Project Comparison Temp Directory",
+        default="",
+    )
 
 
 def unregister():
@@ -288,6 +304,25 @@ def unregister():
     if hasattr(bpy.types.Scene, 'df_comparison_axis'):
         try:
             del bpy.types.Scene.df_comparison_axis
+        except:
+            pass
+    
+    # Unregister project comparison properties
+    if hasattr(bpy.types.Scene, 'df_project_comparison_active'):
+        try:
+            del bpy.types.Scene.df_project_comparison_active
+        except:
+            pass
+    
+    if hasattr(bpy.types.Scene, 'df_project_comparison_commit_hash'):
+        try:
+            del bpy.types.Scene.df_project_comparison_commit_hash
+        except:
+            pass
+    
+    if hasattr(bpy.types.Scene, 'df_project_comparison_temp_dir'):
+        try:
+            del bpy.types.Scene.df_project_comparison_temp_dir
         except:
             pass
     

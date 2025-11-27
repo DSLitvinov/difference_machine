@@ -142,6 +142,180 @@ class DF_OT_open_project_state(Operator):
             return {'CANCELLED'}
 
 
+class DF_OT_compare_project(Operator):
+    """Checkout commit to temporary folder and open in new Blender window."""
+    bl_idname = "df.compare_project"
+    bl_label = "Compare"
+    bl_description = "Checkout this commit to temporary folder and open in new Blender window"
+    bl_options = {'REGISTER'}
+
+    commit_hash: StringProperty(name="Commit Hash")
+
+    def invoke(self, context, event):
+        """Invoke operator - check if comparison is already active."""
+        scene = context.scene
+        # Check if this commit is already being compared
+        if (getattr(scene, 'df_project_comparison_active', False) and 
+            getattr(scene, 'df_project_comparison_commit_hash', '') == self.commit_hash):
+            # Toggle OFF: Close Blender and clean up
+            return self.execute(context)
+        
+        # Execute directly to start comparison
+        return self.execute(context)
+
+    def execute(self, context):
+        """Checkout commit to temp folder and open in new Blender window, or close if already active."""
+        import subprocess
+        import shutil
+        
+        scene = context.scene
+        
+        # Check if comparison is already active for this commit - toggle OFF
+        if (getattr(scene, 'df_project_comparison_active', False) and 
+            getattr(scene, 'df_project_comparison_commit_hash', '') == self.commit_hash):
+            # Toggle OFF: Clean up temporary files
+            temp_dir_str = getattr(scene, 'df_project_comparison_temp_dir', '')
+            if temp_dir_str:
+                temp_working_dir = Path(temp_dir_str)
+                
+                # Clean up temporary directory
+                if temp_working_dir.exists():
+                    try:
+                        shutil.rmtree(temp_working_dir)
+                        self.report({'INFO'}, "Temporary files removed")
+                    except Exception as e:
+                        self.report({'WARNING'}, f"Could not remove temp directory: {str(e)}")
+                
+                # Clear comparison state
+                scene.df_project_comparison_active = False
+                scene.df_project_comparison_commit_hash = ""
+                scene.df_project_comparison_temp_dir = ""
+                
+                return {'FINISHED'}
+        
+        # Toggle ON: Start comparison
+        # Find repository
+        repo_path, error = get_repository_path(self)
+        if not repo_path:
+            return {'CANCELLED'}
+        
+        # Get current .blend file (to know filename)
+        blend_file = Path(bpy.data.filepath)
+        if not blend_file:
+            self.report({'ERROR'}, "Please save the Blender file first")
+            return {'CANCELLED'}
+        
+        # Create temporary directory for checkout
+        dfm_dir = repo_path / ".DFM"
+        compare_temp_dir = dfm_dir / "compare_temp"
+        compare_temp_dir.mkdir(exist_ok=True)
+        
+        # Create unique temp directory for this commit
+        temp_working_dir = compare_temp_dir / f"commit_{self.commit_hash[:16]}"
+        
+        # Clean up if exists
+        if temp_working_dir.exists():
+            shutil.rmtree(temp_working_dir)
+        temp_working_dir.mkdir(parents=True)
+        
+        # Step 1: Restore commit to temporary directory
+        try:
+            from ..forester.core.database import ForesterDB
+            from ..forester.core.storage import ObjectStorage
+            from ..forester.models.commit import Commit
+            from ..forester.commands.checkout import restore_files_from_tree, restore_meshes_from_commit
+            
+            db_path = dfm_dir / "forester.db"
+            db = ForesterDB(db_path)
+            db.connect()
+            
+            try:
+                storage = ObjectStorage(dfm_dir)
+                commit = Commit.from_storage(self.commit_hash, db, storage)
+                
+                if not commit:
+                    self.report({'ERROR'}, f"Commit {self.commit_hash} not found")
+                    return {'CANCELLED'}
+                
+                # Get tree from commit
+                tree = commit.get_tree(db, storage)
+                if not tree:
+                    self.report({'ERROR'}, f"Tree for commit {self.commit_hash} not found")
+                    return {'CANCELLED'}
+                
+                # Restore files from tree to temp directory
+                restore_files_from_tree(tree, temp_working_dir, storage, db)
+                
+                # Restore meshes from commit
+                restore_meshes_from_commit(commit, temp_working_dir, storage, dfm_dir)
+                
+            finally:
+                db.close()
+            
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # Clean up on error
+            if temp_working_dir.exists():
+                shutil.rmtree(temp_working_dir)
+            return {'CANCELLED'}
+        
+        # Step 2: Locate target .blend in temp directory (search recursively)
+        target_blend = None
+        blend_file_name = blend_file.name
+        
+        # First try root directory
+        target_blend = temp_working_dir / blend_file_name
+        if not target_blend.exists():
+            # Search recursively for .blend file
+            for found_file in temp_working_dir.rglob("*.blend"):
+                if found_file.name == blend_file_name:
+                    target_blend = found_file
+                    break
+        
+        if not target_blend or not target_blend.exists():
+            self.report({'ERROR'}, f"Blend file '{blend_file_name}' not found after checkout")
+            return {'CANCELLED'}
+        
+        # Step 3: Find Blender executable and open in new window
+        try:
+            # Get Blender executable path
+            blender_exe = bpy.app.binary_path
+            if not blender_exe:
+                # Fallback: try to find blender in PATH
+                import shutil
+                blender_exe = shutil.which("blender")
+                if not blender_exe:
+                    self.report({'ERROR'}, "Could not find Blender executable")
+                    return {'CANCELLED'}
+            
+            # Convert path to absolute and ensure it's a string
+            target_blend_str = str(target_blend.resolve())
+            
+            # Launch new Blender instance
+            process = subprocess.Popen([blender_exe, target_blend_str], 
+                           stdout=subprocess.DEVNULL, 
+                           stderr=subprocess.DEVNULL)
+            
+            # Store comparison state
+            scene.df_project_comparison_active = True
+            scene.df_project_comparison_commit_hash = self.commit_hash
+            scene.df_project_comparison_temp_dir = str(temp_working_dir)
+            
+            self.report({'INFO'}, f"Opening commit in new Blender window")
+            return {'FINISHED'}
+            
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to open Blender: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # Clean up on error
+            if temp_working_dir.exists():
+                shutil.rmtree(temp_working_dir)
+            return {'CANCELLED'}
+
+
 class DF_OT_delete_commit(Operator):
     """Delete a commit."""
     bl_idname = "df.delete_commit"

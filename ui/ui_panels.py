@@ -431,14 +431,23 @@ class DF_PT_history_panel(Panel):
                         op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
                         op.commit_hash = commit.hash
                 else:
-                    # Для обычных коммитов - Open project state и Delete
+                    # Для обычных коммитов - Open project state, Compare и Delete
                     # Скрываем кнопки, если активен объект сравнения
                     if not is_comparison_object:
-                        # Открыть состояние проекта из этого коммита
+                        # Open project state и Compare в одной строке
                         layout.separator()
-                        row = layout.row()
+                        row = layout.row(align=True)
                         row.scale_y = 1.2
-                        op = row.operator("df.open_project_state", text="Open Project State from This Commit", icon='FILE_FOLDER')
+                        op = row.operator("df.open_project_state", text="Open Project", icon='FILE_FOLDER')
+                        op.commit_hash = commit.hash
+                        
+                        # Check if project comparison is active for this commit
+                        is_project_comparison_active = (
+                            getattr(scene, 'df_project_comparison_active', False) and
+                            getattr(scene, 'df_project_comparison_commit_hash', '') == commit.hash
+                        )
+                        
+                        op = row.operator("df.compare_project", text="Compare", icon='SPLIT_HORIZONTAL', depress=is_project_comparison_active)
                         op.commit_hash = commit.hash
                         
                         layout.separator()

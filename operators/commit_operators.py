@@ -58,6 +58,9 @@ class DF_OT_create_project_commit(Operator):
         # Get current branch from repository
         branch_name = get_current_branch(repo_path) or "main"
         
+        # Get properties
+        props = context.scene.df_commit_props
+        
         # Ensure branch exists (create if needed)
         branch_ref = get_branch_ref(repo_path, branch_name)
         if branch_ref is None:
@@ -76,10 +79,10 @@ class DF_OT_create_project_commit(Operator):
                 # Branch might already exist (race condition), that's okay
                 pass
         
-        # Get default author from preferences
+        # Get author from preferences (always use settings, fallback to "Unknown" if empty)
         from .operator_helpers import get_addon_preferences
         prefs = get_addon_preferences(context)
-        author = props.author if props.author else prefs.default_author
+        author = prefs.default_author if prefs.default_author else "Unknown"
         
         # Create commit
         try:
@@ -144,10 +147,10 @@ class DF_OT_create_mesh_commit(Operator):
         props = context.scene.df_commit_props
         export_options = props.get_export_options()
         
-        # Get default author from preferences
+        # Get author from preferences (always use settings, fallback to "Unknown" if empty)
         from .operator_helpers import get_addon_preferences
         prefs = get_addon_preferences(context)
-        default_author = prefs.default_author
+        default_author = prefs.default_author if prefs.default_author else "Unknown"
         
         # Ensure branch exists (create if needed)
         branch_ref = get_branch_ref(repo_path, branch_name)
