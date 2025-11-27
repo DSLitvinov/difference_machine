@@ -20,6 +20,7 @@ from ..operators.commit_operators import (
     DF_OT_create_branch,
     DF_OT_switch_branch,
     DF_OT_delete_branch,
+    DF_OT_init_project,
 )
 from ..operators.history_operators import (
     DF_OT_select_commit,
@@ -55,6 +56,7 @@ classes = [
     DF_OT_create_branch,
     DF_OT_switch_branch,
     DF_OT_delete_branch,
+    DF_OT_init_project,
     # History operators
     DF_OT_select_commit,
     DF_OT_checkout_commit,

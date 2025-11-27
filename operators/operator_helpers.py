@@ -57,6 +57,27 @@ def get_repository_path(operator=None) -> Tuple[Optional[Path], Optional[str]]:
     return repo_path, None
 
 
+def is_repository_initialized(context) -> bool:
+    """
+    Check if repository is initialized (has .DFM folder and database).
+    
+    Args:
+        context: Blender context
+        
+    Returns:
+        True if .DFM folder and forester.db exist, False otherwise
+    """
+    if not bpy.data.filepath:
+        return False
+    
+    blend_file = Path(bpy.data.filepath)
+    project_root = blend_file.parent
+    dfm_dir = project_root / ".DFM"
+    db_path = dfm_dir / "forester.db"
+    
+    return dfm_dir.exists() and db_path.exists()
+
+
 def check_repository_state(context) -> Tuple[bool, bool, bool, Optional[str]]:
     """
     Check repository state: file saved, repository exists, branches exist.

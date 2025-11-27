@@ -85,7 +85,24 @@ def get_current_head_commit(repo_path: Path) -> Optional[str]:
     if not branch:
         return None
     
-    return get_branch_ref(repo_path, branch)
+    # First try to get from branch ref
+    commit_hash = get_branch_ref(repo_path, branch)
+    if commit_hash:
+        return commit_hash
+    
+    # Fallback to metadata.head if branch ref is empty
+    from .metadata import Metadata
+    metadata_path = repo_path / ".DFM" / "metadata.json"
+    if metadata_path.exists():
+        try:
+            metadata = Metadata(metadata_path)
+            metadata.load()
+            return metadata.head
+        except Exception:
+            # If metadata can't be loaded, return None
+            pass
+    
+    return None
 
 
 

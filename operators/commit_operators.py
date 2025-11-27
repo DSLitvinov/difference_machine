@@ -22,7 +22,7 @@ from ..forester.commands import (
 from ..forester.core.refs import get_branch_ref, get_current_branch
 from ..forester.core.metadata import Metadata
 from .mesh_io import export_mesh_to_json
-from .operator_helpers import get_repository_path, process_meshes_sequentially
+from .operator_helpers import get_repository_path, process_meshes_sequentially, is_repository_initialized
 
 
 class DF_OT_create_project_commit(Operator):
@@ -535,5 +535,37 @@ class DF_OT_delete_branch(Operator):
             return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to delete branch: {str(e)}")
+            return {'CANCELLED'}
+
+
+class DF_OT_init_project(Operator):
+    """Initialize a new Forester repository."""
+    bl_idname = "df.init_project"
+    bl_label = "Init Project"
+    bl_description = "Initialize a new Forester repository in the current project folder"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        """Execute the operator."""
+        if not bpy.data.filepath:
+            self.report({'ERROR'}, "Please save the Blender file first")
+            return {'CANCELLED'}
+        
+        blend_file = Path(bpy.data.filepath)
+        project_root = blend_file.parent
+        
+        # Check if repository already exists
+        if is_repository_initialized(context):
+            self.report({'WARNING'}, "Repository already initialized")
+            return {'CANCELLED'}
+        
+        try:
+            init_repository(project_root)
+            self.report({'INFO'}, "Repository initialized successfully")
+            # Refresh branches after initialization
+            bpy.ops.df.refresh_branches()
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to initialize repository: {str(e)}")
             return {'CANCELLED'}
 

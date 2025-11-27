@@ -38,6 +38,12 @@ class DF_PT_commit_panel(Panel):
     bl_category = "Difference Machine"
     bl_order = 2
 
+    @classmethod
+    def poll(cls, context):
+        """Show panel only if repository is initialized."""
+        from ..operators.operator_helpers import is_repository_initialized
+        return is_repository_initialized(context)
+
     def draw(self, context):
         """Draw the panel UI."""
         layout = self.layout
@@ -141,38 +147,18 @@ class DF_PT_commit_panel(Panel):
         # Message
         layout.prop(props, "message", text="Message")
         
-        # Check repository state
-        from ..operators.operator_helpers import check_repository_state
-        file_saved, repo_exists, has_branches, error_msg = check_repository_state(context)
-        
-        # Create commit button
+        # Create commit button (no error messages, no disabled states)
         layout.separator()
-        
-        # Show error message if repository is not ready
-        if not file_saved or not repo_exists or not has_branches:
-            if error_msg:
-                box = layout.box()
-                box.label(text=error_msg, icon='ERROR')
-                if not file_saved:
-                    box.label(text="1. Save the Blender file to a project folder", icon='INFO')
-                if not repo_exists:
-                    box.label(text="2. Initialize repository (will be done automatically)", icon='INFO')
-                if not has_branches:
-                    box.label(text="3. Create a branch first", icon='INFO')
         
         if props.commit_mode == 'SELECTED_OBJECT':
             if selected_objects:
                 row = layout.row()
-                row.enabled = (file_saved and repo_exists and has_branches)
                 row.operator("df.create_mesh_commit", text="Create Commit", icon='EXPORT')
             else:
-                # Disabled button when no objects selected
                 row = layout.row()
-                row.enabled = False
                 row.operator("df.create_mesh_commit", text="Create Commit", icon='EXPORT')
         else:
             row = layout.row()
-            row.enabled = (file_saved and repo_exists and has_branches)
             row.operator("df.create_project_commit", text="Create Commit", icon='EXPORT')
 
 
@@ -201,62 +187,62 @@ class DF_PT_branch_panel(Panel):
                                active_obj.name == comparison_obj_name)
         
         # Check repository state
-        from ..operators.operator_helpers import check_repository_state
+        from ..operators.operator_helpers import check_repository_state, is_repository_initialized
         file_saved, repo_exists, has_branches, error_msg = check_repository_state(context)
+        repo_initialized = is_repository_initialized(context)
         
         # Refresh button (всегда доступен для просмотра)
         row = layout.row()
         row.operator("df.refresh_branches", text="Refresh Branches", icon='FILE_REFRESH')
         
-        # Show error message if repository is not ready
-        if not file_saved or not repo_exists or not has_branches:
+        # Init project button (show only if repository not initialized)
+        if not repo_initialized:
             layout.separator()
-            if error_msg:
-                box = layout.box()
-                box.label(text=error_msg, icon='ERROR')
-                if not file_saved:
-                    box.label(text="1. Save the Blender file to a project folder", icon='INFO')
-                if not repo_exists:
-                    box.label(text="2. Initialize repository (will be done automatically)", icon='INFO')
-                if not has_branches:
-                    box.label(text="3. Create a branch first", icon='INFO')
+            row = layout.row()
+            row.scale_y = 1.2
+            row.operator("df.init_project", text="Init Project", icon='FILE_NEW')
         
-        # Auto-refresh if list is empty and file is saved
+        # Show error message only if file not saved
+        if not file_saved:
+            layout.separator()
+            box = layout.box()
+            box.label(text="Please save the Blender file first", icon='ERROR')
+        
+        # Auto-refresh if list is empty and file is saved and repo initialized
         branches = scene.df_branches
-        if len(branches) == 0 and bpy.data.filepath:
+        if len(branches) == 0 and bpy.data.filepath and repo_initialized:
             # Try to auto-load
             try:
                 bpy.ops.df.refresh_branches()
             except:
                 pass
         
-        # List branches using UIList
-        if len(branches) == 0:
-            box = layout.box()
-            box.label(text="No branches found", icon='INFO')
-            box.label(text="Click Refresh to load")
-        else:
-            # UIList for branches (stretchable)
-            row = layout.row()
-            row.template_list(
-                "DF_UL_branch_list", "",
-                scene, "df_branches",
-                scene, "df_branch_list_index",
-                rows=6  # Default 6 rows, stretchable
-            )
+        # List branches using UIList (only if repo initialized)
+        if repo_initialized:
+            if len(branches) == 0:
+                box = layout.box()
+                box.label(text="No branches found", icon='INFO')
+                box.label(text="Click Refresh to load")
+            else:
+                # UIList for branches (stretchable)
+                row = layout.row()
+                row.template_list(
+                    "DF_UL_branch_list", "",
+                    scene, "df_branches",
+                    scene, "df_branch_list_index",
+                    rows=6  # Default 6 rows, stretchable
+                )
         
-        # Branch operations (скрываем для объекта сравнения)
-        if not is_comparison_object:
+        # Branch operations (скрываем для объекта сравнения, показываем только если repo initialized)
+        if not is_comparison_object and repo_initialized:
             layout.separator()
             
             col = layout.column(align=True)
-            # Enable buttons only if repository is ready
+            # Buttons always enabled (no disabled states)
             create_row = col.row()
-            create_row.enabled = (file_saved and repo_exists)
             create_row.operator("df.create_branch", text="Create New Branch", icon='ADD')
             
             switch_row = col.row()
-            switch_row.enabled = (file_saved and repo_exists and has_branches)
             switch_row.operator("df.switch_branch", text="Switch Branch", icon='ARROW_LEFTRIGHT')
             
             # Delete branch button (only if branch is selected)
@@ -267,12 +253,8 @@ class DF_PT_branch_panel(Panel):
                 layout.separator()
                 selected_branch = branches[scene.df_branch_list_index]
                 
-                # Disable delete button if:
-                # 1. Repository is not ready
-                # 2. Only one branch exists (cannot delete the last branch)
-                # 3. Selected branch is the current branch (cannot delete current branch)
-                can_delete = (file_saved and repo_exists and has_branches and 
-                             len(branches) > 1 and not selected_branch.is_current)
+                # Can delete if more than one branch and not current
+                can_delete = (len(branches) > 1 and not selected_branch.is_current)
                 
                 row = layout.row()
                 row.enabled = can_delete
@@ -283,10 +265,7 @@ class DF_PT_branch_panel(Panel):
                 if not can_delete:
                     layout.separator()
                     info_row = layout.row()
-                    if not file_saved or not repo_exists or not has_branches:
-                        # Repository state messages are shown above
-                        pass
-                    elif len(branches) <= 1:
+                    if len(branches) <= 1:
                         info_row.label(text="Cannot delete the last branch", icon='INFO')
                     elif selected_branch.is_current:
                         info_row.label(text="Cannot delete current branch", icon='INFO')
@@ -306,6 +285,12 @@ class DF_PT_history_panel(Panel):
     bl_category = "Difference Machine"
     bl_order = 3
 
+    @classmethod
+    def poll(cls, context):
+        """Show panel only if repository is initialized."""
+        from ..operators.operator_helpers import is_repository_initialized
+        return is_repository_initialized(context)
+
     def draw(self, context):
         """Draw the panel UI."""
         layout = self.layout
@@ -319,26 +304,9 @@ class DF_PT_history_panel(Panel):
                                comparison_obj_name and 
                                active_obj.name == comparison_obj_name)
         
-        # Check repository state
-        from ..operators.operator_helpers import check_repository_state
-        file_saved, repo_exists, has_branches, error_msg = check_repository_state(context)
-        
         # Refresh button (всегда доступен для просмотра)
         row = layout.row()
         row.operator("df.refresh_history", icon='FILE_REFRESH')
-        
-        # Show error message if repository is not ready
-        if not file_saved or not repo_exists or not has_branches:
-            layout.separator()
-            if error_msg:
-                box = layout.box()
-                box.label(text=error_msg, icon='ERROR')
-                if not file_saved:
-                    box.label(text="1. Save the Blender file to a project folder", icon='INFO')
-                if not repo_exists:
-                    box.label(text="2. Initialize repository (will be done automatically)", icon='INFO')
-                if not has_branches:
-                    box.label(text="3. Create a branch first", icon='INFO')
         
         # Branch (display as text)
         props = context.scene.df_commit_props
@@ -450,8 +418,6 @@ class DF_PT_history_panel(Panel):
                             layout.separator()
                             row = layout.row(align=True)
                             row.scale_y = 1.5
-                            # Enable buttons only if repository is ready
-                            row.enabled = (file_saved and repo_exists and has_branches)
                             op = row.operator("df.replace_mesh", text="Replace This Mesh", icon='FILE_REFRESH')
                             op.commit_hash = commit.hash
                             
@@ -496,8 +462,6 @@ class DF_PT_history_panel(Panel):
                         layout.separator()
                         row = layout.row()
                         row.scale_y = 1.2
-                        # Enable button only if repository is ready
-                        row.enabled = (file_saved and repo_exists and has_branches)
                         op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
                         op.commit_hash = commit.hash
                 else:
@@ -508,8 +472,6 @@ class DF_PT_history_panel(Panel):
                         layout.separator()
                         row = layout.row(align=True)
                         row.scale_y = 1.2
-                        # Enable buttons only if repository is ready
-                        row.enabled = (file_saved and repo_exists and has_branches)
                         op = row.operator("df.open_project_state", text="Open Project", icon='FILE_FOLDER')
                         op.commit_hash = commit.hash
                         
@@ -525,7 +487,5 @@ class DF_PT_history_panel(Panel):
                         layout.separator()
                         row = layout.row()
                         row.scale_y = 1.2
-                        # Enable button only if repository is ready
-                        row.enabled = (file_saved and repo_exists and has_branches)
                         op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
                         op.commit_hash = commit.hash
