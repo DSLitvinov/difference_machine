@@ -1,6 +1,6 @@
 """
 Reference management for Forester.
-Handles branch references and HEAD.
+Handles branch references.
 """
 
 from pathlib import Path
@@ -48,44 +48,6 @@ def set_branch_ref(repo_path: Path, branch: str, commit_hash: Optional[str]) -> 
             f.write(commit_hash)
         else:
             f.write("")  # Empty file means no commit
-
-
-def get_head(repo_path: Path) -> Optional[str]:
-    """
-    Get current HEAD (branch name or commit hash).
-    
-    Args:
-        repo_path: Path to repository root
-        
-    Returns:
-        Branch name or commit hash, or None
-    """
-    head_file = repo_path / ".DFM" / "HEAD"
-    
-    if not head_file.exists():
-        return None
-    
-    with open(head_file, 'r', encoding='utf-8') as f:
-        content = f.read().strip()
-    
-    return content if content else None
-
-
-def set_head(repo_path: Path, branch_or_commit: str) -> None:
-    """
-    Set HEAD to branch or commit.
-    
-    Args:
-        repo_path: Path to repository root
-        branch_or_commit: Branch name or commit hash
-    """
-    head_file = repo_path / ".DFM" / "HEAD"
-    
-    # Ensure directory exists
-    head_file.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(head_file, 'w', encoding='utf-8') as f:
-        f.write(branch_or_commit)
 
 
 def get_current_branch(repo_path: Path) -> Optional[str]:

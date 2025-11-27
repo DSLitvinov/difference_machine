@@ -9,7 +9,7 @@ from ..core.database import ForesterDB
 from ..core.ignore import IgnoreRules
 from ..core.metadata import Metadata
 from ..core.storage import ObjectStorage
-from ..core.refs import get_branch_ref, get_current_branch, set_branch_ref, set_head
+from ..core.refs import get_branch_ref, get_current_branch, set_branch_ref
 from ..models.commit import Commit
 from ..models.tree import Tree
 from ..models.mesh import Mesh
@@ -95,7 +95,7 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
             # Step 3: Restore meshes from commit
             restore_meshes_from_commit(commit, working_dir, storage, dfm_dir)
         
-        # Step 4: Update HEAD and metadata
+        # Step 4: Update metadata
         if is_branch:
             # Update current branch
             metadata_path = dfm_dir / "metadata.json"
@@ -104,9 +104,6 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
             metadata.current_branch = target
             metadata.head = commit_hash
             metadata.save()
-            
-            # Update HEAD file
-            set_head(repo_path, target)
         else:
             # Detached HEAD state (pointing to commit)
             metadata_path = dfm_dir / "metadata.json"
@@ -114,9 +111,6 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
             metadata.load()
             metadata.head = commit_hash
             metadata.save()
-            
-            # Update HEAD file to point to commit
-            set_head(repo_path, commit_hash)
         
         return (True, None)
         

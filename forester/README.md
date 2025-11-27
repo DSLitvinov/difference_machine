@@ -85,7 +85,6 @@ project/
 │   ├── forester.db          # SQLite database
 │   ├── metadata.json        # Repository metadata
 │   ├── .dfmignore          # Ignore rules
-│   ├── HEAD                # Current HEAD reference
 │   ├── refs/
 │   │   └── branches/        # Branch references
 │   ├── objects/
@@ -93,8 +92,7 @@ project/
 │   │   ├── trees/          # Directory structures
 │   │   ├── commits/        # Commit objects
 │   │   └── meshes/         # Mesh objects
-│   ├── stash/              # Stash storage
-│   └── temp_view/          # Temporary commit views
+│   └── stash/              # Stash storage
 └── working/                 # Working directory
     ├── *.blend             # Blender files
     ├── textures/           # Textures

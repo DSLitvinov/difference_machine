@@ -37,14 +37,12 @@ def test_init_repository():
         assert (dfm_dir / "forester.db").exists(), "forester.db should exist"
         assert (dfm_dir / "metadata.json").exists(), "metadata.json should exist"
         assert (dfm_dir / ".dfmignore").exists(), ".dfmignore should exist"
-        assert (dfm_dir / "HEAD").exists(), "HEAD file should exist"
         assert (dfm_dir / "refs" / "branches" / "main").exists(), "main branch ref should exist"
         assert (dfm_dir / "objects" / "blobs").exists(), "blobs directory should exist"
         assert (dfm_dir / "objects" / "trees").exists(), "trees directory should exist"
         assert (dfm_dir / "objects" / "commits").exists(), "commits directory should exist"
         assert (dfm_dir / "objects" / "meshes").exists(), "meshes directory should exist"
         assert (dfm_dir / "stash").exists(), "stash directory should exist"
-        assert (dfm_dir / "temp_view").exists(), "temp_view directory should exist"
         print("  ✓ Directory structure created")
         
         # Test metadata
@@ -75,13 +73,6 @@ def test_init_repository():
         assert ignore_rules.should_ignore(project_path / ".DFM" / "test", project_path), \
             "Should ignore .DFM directory"
         print("  ✓ .dfmignore created with default rules")
-        
-        # Test HEAD file
-        head_file = dfm_dir / "HEAD"
-        with open(head_file, 'r') as f:
-            head_content = f.read().strip()
-        assert head_content == "main", "HEAD should point to 'main'"
-        print("  ✓ HEAD file created")
         
         # Test branch reference
         branch_ref = dfm_dir / "refs" / "branches" / "main"

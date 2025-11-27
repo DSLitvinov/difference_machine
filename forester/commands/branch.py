@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from ..core.database import ForesterDB
 from ..core.metadata import Metadata
-from ..core.refs import get_branch_ref, set_branch_ref, get_current_branch, set_head
+from ..core.refs import get_branch_ref, set_branch_ref, get_current_branch
 from ..models.commit import Commit
 
 
@@ -185,7 +185,7 @@ def get_branch_commits(repo_path: Path, branch_name: str) -> List[Dict[str, Any]
 def switch_branch(repo_path: Path, branch_name: str) -> bool:
     """
     Switch to a different branch (without checkout).
-    This only updates HEAD and metadata, doesn't change working directory.
+    This only updates metadata, doesn't change working directory.
     
     Args:
         repo_path: Path to repository root
@@ -216,9 +216,6 @@ def switch_branch(repo_path: Path, branch_name: str) -> bool:
     branch_commit = get_branch_ref(repo_path, branch_name)
     metadata.head = branch_commit
     metadata.save()
-    
-    # Update HEAD file
-    set_head(repo_path, branch_name)
     
     return True
 

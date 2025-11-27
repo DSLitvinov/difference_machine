@@ -52,9 +52,6 @@ def init_repository(project_path: Path, force: bool = False) -> bool:
     stash_dir = dfm_dir / "stash"
     stash_dir.mkdir(exist_ok=True)
     
-    temp_view_dir = dfm_dir / "temp_view"
-    temp_view_dir.mkdir(exist_ok=True)
-    
     # Initialize database
     db_path = dfm_dir / "forester.db"
     with ForesterDB(db_path) as db:
@@ -64,11 +61,6 @@ def init_repository(project_path: Path, force: bool = False) -> bool:
     metadata_path = dfm_dir / "metadata.json"
     metadata = Metadata(metadata_path)
     metadata.initialize(current_branch="main", head=None)
-    
-    # Create HEAD file (points to current branch)
-    head_file = dfm_dir / "HEAD"
-    with open(head_file, 'w', encoding='utf-8') as f:
-        f.write("main\n")
     
     # Create .dfmignore file
     ignore_file = dfm_dir / ".dfmignore"
