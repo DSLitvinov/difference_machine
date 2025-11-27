@@ -4,6 +4,29 @@ UI panels for Difference Machine add-on.
 
 import bpy
 from bpy.types import Panel
+from pathlib import Path
+
+def get_current_branch_name(context):
+    """Get current branch name from repository or return default."""
+    try:
+        blend_file = Path(bpy.data.filepath)
+        if not blend_file:
+            return "main"
+        
+        from ..forester.core.refs import get_current_branch
+        from ..forester.core.storage import find_repository
+        
+        project_root = blend_file.parent
+        repo_path = find_repository(project_root)
+        if repo_path:
+            branch_name = get_current_branch(repo_path)
+            return branch_name if branch_name else "main"
+    except:
+        pass
+    
+    # Fallback to props or default
+    props = context.scene.df_commit_props
+    return props.branch if props.branch else "main"
 
 
 class DF_PT_commit_panel(Panel):
@@ -109,10 +132,11 @@ class DF_PT_commit_panel(Panel):
         # Common fields
         layout.separator()
         
-        # Branch
+        # Branch (display as text)
         row = layout.row()
         row.label(text="Branch:")
-        row.prop(props, "branch", text="")
+        current_branch = get_current_branch_name(context)
+        row.label(text=current_branch)
         
         # Message
         layout.prop(props, "message", text="Message")
@@ -250,13 +274,12 @@ class DF_PT_history_panel(Panel):
         row = layout.row()
         row.operator("df.refresh_history", icon='FILE_REFRESH')
         
-        # Branch selector (только просмотр для объекта сравнения)
+        # Branch (display as text)
         props = context.scene.df_commit_props
         row = layout.row()
         row.label(text="Branch:")
-        if is_comparison_object:
-            row.enabled = False
-        row.prop(props, "branch", text="")
+        current_branch = get_current_branch_name(context)
+        row.label(text=current_branch)
         
         # Auto-refresh if list is empty and file is saved
         commits = context.scene.df_commits

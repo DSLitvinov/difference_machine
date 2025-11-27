@@ -55,8 +55,8 @@ class DF_OT_create_project_commit(Operator):
                 self.report({'ERROR'}, f"Failed to initialize repository: {str(e)}")
                 return {'CANCELLED'}
         
-        props = context.scene.df_commit_props
-        branch_name = props.branch or "main"
+        # Get current branch from repository
+        branch_name = get_current_branch(repo_path) or "main"
         
         # Ensure branch exists (create if needed)
         branch_ref = get_branch_ref(repo_path, branch_name)
@@ -139,8 +139,9 @@ class DF_OT_create_mesh_commit(Operator):
                 self.report({'ERROR'}, f"Failed to initialize repository: {str(e)}")
                 return {'CANCELLED'}
         
+        # Get current branch from repository
+        branch_name = get_current_branch(repo_path) or "main"
         props = context.scene.df_commit_props
-        branch_name = props.branch or "main"
         export_options = props.get_export_options()
         
         # Get default author from preferences
@@ -239,8 +240,8 @@ class DF_OT_refresh_history(Operator):
             context.scene.df_commits.clear()
             return {'FINISHED'}
         
-        props = context.scene.df_commit_props
-        branch_name = props.branch or "main"
+        # Get current branch from repository
+        branch_name = get_current_branch(repo_path) or "main"
         
         # Get commits from forester
         try:
