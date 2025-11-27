@@ -35,11 +35,11 @@ class DF_OT_create_project_commit(Operator):
     def execute(self, context):
         """Execute the operator."""
         # Find repository
-        blend_file = Path(bpy.data.filepath)
-        if not blend_file:
+        if not bpy.data.filepath:
             self.report({'ERROR'}, "Please save the Blender file first")
             return {'CANCELLED'}
         
+        blend_file = Path(bpy.data.filepath)
         # Determine project root (directory containing .blend file)
         project_root = blend_file.parent
         
@@ -54,6 +54,14 @@ class DF_OT_create_project_commit(Operator):
             except Exception as e:
                 self.report({'ERROR'}, f"Failed to initialize repository: {str(e)}")
                 return {'CANCELLED'}
+        
+        # Check if branches exist
+        branches = list_branches(repo_path)
+        if len(branches) == 0:
+            self.report({'ERROR'}, 
+                "No branches found. Please create a branch first.\n"
+                "Go to Branch Management panel and click 'Create New Branch'.")
+            return {'CANCELLED'}
         
         # Get current branch from repository
         branch_name = get_current_branch(repo_path) or "main"
@@ -122,11 +130,11 @@ class DF_OT_create_mesh_commit(Operator):
             return {'CANCELLED'}
         
         # Find repository
-        blend_file = Path(bpy.data.filepath)
-        if not blend_file:
+        if not bpy.data.filepath:
             self.report({'ERROR'}, "Please save the Blender file first")
             return {'CANCELLED'}
         
+        blend_file = Path(bpy.data.filepath)
         # Determine project root
         project_root = blend_file.parent
         
@@ -141,6 +149,14 @@ class DF_OT_create_mesh_commit(Operator):
             except Exception as e:
                 self.report({'ERROR'}, f"Failed to initialize repository: {str(e)}")
                 return {'CANCELLED'}
+        
+        # Check if branches exist
+        branches = list_branches(repo_path)
+        if len(branches) == 0:
+            self.report({'ERROR'}, 
+                "No branches found. Please create a branch first.\n"
+                "Go to Branch Management panel and click 'Create New Branch'.")
+            return {'CANCELLED'}
         
         # Get current branch from repository
         branch_name = get_current_branch(repo_path) or "main"
@@ -353,6 +369,29 @@ class DF_OT_create_branch(Operator):
 
     def invoke(self, context, event):
         """Invoke the operator (show dialog)."""
+        # Check if file is saved and repository exists
+        from .operator_helpers import check_repository_state
+        file_saved, repo_exists, _, error_msg = check_repository_state(context)
+        
+        if not file_saved:
+            self.report({'ERROR'}, error_msg or "Please save the Blender file first")
+            return {'CANCELLED'}
+        
+        if not repo_exists:
+            # Check if .DFM directory exists
+            if bpy.data.filepath:
+                blend_file = Path(bpy.data.filepath)
+                dfm_dir = blend_file.parent / ".DFM"
+                if not dfm_dir.exists():
+                    self.report({'ERROR'}, 
+                        "Repository not initialized.\n"
+                        "Please create a project folder and save the Blender file in it.\n"
+                        "Then the repository will be initialized automatically.")
+                    return {'CANCELLED'}
+            
+            self.report({'ERROR'}, error_msg or "Repository not found")
+            return {'CANCELLED'}
+        
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):

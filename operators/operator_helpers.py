@@ -5,7 +5,7 @@ Helper functions for operators to reduce code duplication.
 import bpy
 from pathlib import Path
 from typing import Optional, Tuple
-from ..forester.commands import find_repository
+from ..forester.commands import find_repository, list_branches
 
 
 def get_addon_preferences(context):
@@ -40,13 +40,13 @@ def get_repository_path(operator=None) -> Tuple[Optional[Path], Optional[str]]:
         If successful: (Path, None)
         If error: (None, error_message)
     """
-    blend_file = Path(bpy.data.filepath)
-    if not blend_file:
+    if not bpy.data.filepath:
         error_msg = "Please save the Blender file first"
         if operator:
             operator.report({'ERROR'}, error_msg)
         return None, error_msg
     
+    blend_file = Path(bpy.data.filepath)
     repo_path = find_repository(blend_file.parent)
     if not repo_path:
         error_msg = "Not a Forester repository"
@@ -55,6 +55,41 @@ def get_repository_path(operator=None) -> Tuple[Optional[Path], Optional[str]]:
         return None, error_msg
     
     return repo_path, None
+
+
+def check_repository_state(context) -> Tuple[bool, bool, bool, Optional[str]]:
+    """
+    Check repository state: file saved, repository exists, branches exist.
+    
+    Args:
+        context: Blender context
+        
+    Returns:
+        Tuple of (file_saved, repo_exists, has_branches, error_message)
+    """
+    # Check if file is saved
+    if not bpy.data.filepath:
+        return (False, False, False, "Please save the Blender file first")
+    
+    blend_file = Path(bpy.data.filepath)
+    
+    # Check if repository exists
+    project_root = blend_file.parent
+    repo_path = find_repository(project_root)
+    if not repo_path:
+        # Check if .DFM directory exists
+        dfm_dir = project_root / ".DFM"
+        if not dfm_dir.exists():
+            return (True, False, False, "Repository not initialized. Please create a project folder and save the Blender file in it.")
+        return (True, False, False, "Repository not found")
+    
+    # Check if branches exist
+    try:
+        branches = list_branches(repo_path)
+        has_branches = len(branches) > 0
+        return (True, True, has_branches, None if has_branches else "No branches found. Please create a branch first.")
+    except Exception as e:
+        return (True, True, False, f"Error checking branches: {str(e)}")
 
 
 def get_active_mesh_object(operator=None) -> Tuple[Optional[bpy.types.Object], Optional[str]]:
