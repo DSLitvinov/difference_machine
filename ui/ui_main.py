@@ -22,6 +22,7 @@ from ..operators.commit_operators import (
     DF_OT_delete_branch,
     DF_OT_init_project,
     DF_OT_rebuild_database,
+    DF_OT_garbage_collect,
 )
 from ..operators.history_operators import (
     DF_OT_select_commit,
@@ -59,6 +60,7 @@ classes = [
     DF_OT_delete_branch,
     DF_OT_init_project,
     DF_OT_rebuild_database,
+    DF_OT_garbage_collect,
     # History operators
     DF_OT_select_commit,
     DF_OT_checkout_commit,

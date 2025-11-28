@@ -582,6 +582,10 @@ class ForesterDB:
         
         return [dict(row) for row in cursor.fetchall()]
     
+    def get_all_stashes(self) -> List[Dict[str, Any]]:
+        """Get all stashes (alias for list_stashes)."""
+        return self.list_stashes()
+    
     def delete_stash(self, stash_hash: str) -> None:
         """Delete stash from database."""
         if self.conn is None:

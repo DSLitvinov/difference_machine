@@ -33,6 +33,9 @@ from .delete_commit import (
 from .rebuild_database import (
     rebuild_database,
 )
+from .garbage_collect import (
+    garbage_collect,
+)
 
 __all__ = [
     "init_repository",
@@ -56,5 +59,6 @@ __all__ = [
     "auto_compress_mesh_commits",
     "delete_commit",
     "rebuild_database",
+    "garbage_collect",
 ]
 

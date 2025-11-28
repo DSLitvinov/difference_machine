@@ -41,6 +41,14 @@ Difference Machine is a Blender add-on that provides Git-like version control fu
   - Axis selection buttons (X, Y, Z) for repositioning comparison object
   - Compare button toggles comparison on/off
 
+### Repository Maintenance
+- **Database Rebuild**: Rebuild corrupted database from file system storage
+- **Garbage Collection**: Remove unused objects (commits, trees, blobs, meshes) not referenced by any branches
+  - Manual garbage collection with dry-run preview
+  - Automatic garbage collection with configurable intervals (hours/days/weeks)
+- **Auto-compress**: Automatically delete old mesh-only commits when creating new ones
+  - Configurable number of commits to keep
+
 ## Installation
 
 1. Download or clone this repository
@@ -57,6 +65,17 @@ After installation, you can access Difference Machine from the 3D Viewport sideb
 1. **Branch Management**: Manage branches, create, switch, and delete branches
 2. **Create Commit**: Create new commits (project or mesh-only) with export options
 3. **Load Commit**: View commit history, load/replace meshes, compare versions
+
+### Preferences
+
+Access add-on preferences via `Edit > Preferences > Extensions > Difference Machine`:
+
+- **Commit Settings**: Set default author name
+- **Auto-compress Settings**: Enable automatic compression of mesh-only commits
+- **Garbage Collection**: 
+  - Manual garbage collection (with dry-run option)
+  - Automatic garbage collection with configurable intervals
+- **Database Maintenance**: Rebuild database from storage if corrupted
 
 ### Basic Workflow
 
@@ -94,10 +113,13 @@ difference_machine/
 
 ## Technical Details
 
-- **Storage**: Uses SQLite database for metadata and object storage for mesh/material data
+- **Storage**: Uses SQLite database for metadata and content-addressable object storage for mesh/material data
 - **Hashing**: SHA-256 hashing for content-addressable storage
 - **Texture Handling**: Automatic texture deduplication and path resolution
 - **Material Export**: Full node tree structure export with texture references
+- **Database Recovery**: Automatic database rebuild from file system storage
+- **Garbage Collection**: Safe removal of unreferenced objects with reference checking
+- **Logging**: Comprehensive logging system for debugging and error tracking
 
 ## License
 
