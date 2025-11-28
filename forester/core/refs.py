@@ -52,7 +52,7 @@ def set_branch_ref(repo_path: Path, branch: str, commit_hash: Optional[str]) -> 
 
 def get_current_branch(repo_path: Path) -> Optional[str]:
     """
-    Get current branch name from metadata.
+    Get current branch name from database.
     
     Args:
         repo_path: Path to repository root
@@ -60,15 +60,21 @@ def get_current_branch(repo_path: Path) -> Optional[str]:
     Returns:
         Branch name or None
     """
-    from .metadata import Metadata
-    
-    metadata_path = repo_path / ".DFM" / "metadata.json"
-    if not metadata_path.exists():
+    dfm_dir = repo_path / ".DFM"
+    if not dfm_dir.exists():
         return None
     
-    metadata = Metadata(metadata_path)
-    metadata.load()
-    return metadata.current_branch
+    db_path = dfm_dir / "forester.db"
+    if not db_path.exists():
+        return None
+    
+    from .database import ForesterDB
+    
+    try:
+        with ForesterDB(db_path) as db:
+            return db.get_current_branch()
+    except Exception:
+        return None
 
 
 def get_current_head_commit(repo_path: Path) -> Optional[str]:
@@ -90,16 +96,15 @@ def get_current_head_commit(repo_path: Path) -> Optional[str]:
     if commit_hash:
         return commit_hash
     
-    # Fallback to metadata.head if branch ref is empty
-    from .metadata import Metadata
-    metadata_path = repo_path / ".DFM" / "metadata.json"
-    if metadata_path.exists():
+    # Fallback to database head if branch ref is empty
+    dfm_dir = repo_path / ".DFM"
+    db_path = dfm_dir / "forester.db"
+    if db_path.exists():
         try:
-            metadata = Metadata(metadata_path)
-            metadata.load()
-            return metadata.head
+            from .database import ForesterDB
+            with ForesterDB(db_path) as db:
+                return db.get_head()
         except Exception:
-            # If metadata can't be loaded, return None
             pass
     
     return None

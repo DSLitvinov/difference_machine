@@ -213,7 +213,6 @@ def cmd_status(args):
     
     try:
         from .core.refs import get_current_branch, get_current_head_commit
-        from .core.metadata import Metadata
         
         # Get current branch
         branch = get_current_branch(repo_path)

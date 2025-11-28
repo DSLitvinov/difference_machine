@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from ..core.database import ForesterDB
 from ..core.ignore import IgnoreRules
-from ..core.metadata import Metadata
 from ..core.storage import ObjectStorage
 from ..core.refs import get_current_branch, get_current_head_commit, set_branch_ref
 from ..models.tree import Tree, TreeEntry
@@ -338,12 +337,8 @@ def create_mesh_only_commit(
         # Update branch reference
         set_branch_ref(repo_path, branch, commit.hash)
         
-        # Update metadata
-        metadata_path = dfm_dir / "metadata.json"
-        metadata = Metadata(metadata_path)
-        metadata.load()
-        metadata.head = commit.hash
-        metadata.save()
+        # Update HEAD in database
+        db.set_head(commit.hash)
         
         return commit.hash
         

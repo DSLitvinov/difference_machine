@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Optional, List
 from ..core.database import ForesterDB
 from ..core.ignore import IgnoreRules
-from ..core.metadata import Metadata
 from ..core.storage import ObjectStorage
 from ..core.refs import get_current_branch, get_current_head_commit, set_branch_ref
 from ..models.tree import Tree
@@ -170,12 +169,8 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown") -> Opt
         # Step 6: Update branch reference
         set_branch_ref(repo_path, branch, commit.hash)
         
-        # Step 7: Update metadata
-        metadata_path = dfm_dir / "metadata.json"
-        metadata = Metadata(metadata_path)
-        metadata.load()
-        metadata.head = commit.hash
-        metadata.save()
+        # Step 7: Update HEAD in database
+        db.set_head(commit.hash)
         
         return commit.hash
         

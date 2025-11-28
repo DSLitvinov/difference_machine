@@ -134,6 +134,21 @@ class ForesterDB:
             )
         """)
         
+        # Repository state table (for current branch and HEAD)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS repository_state (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                current_branch TEXT NOT NULL DEFAULT 'main',
+                head TEXT
+            )
+        """)
+        
+        # Initialize repository_state if it doesn't exist
+        cursor.execute("""
+            INSERT OR IGNORE INTO repository_state (id, current_branch, head)
+            VALUES (1, 'main', NULL)
+        """)
+        
         self.conn.commit()
         self.create_indexes()
     
@@ -509,6 +524,70 @@ class ForesterDB:
         
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM stash WHERE hash = ?", (stash_hash,))
+        self.conn.commit()
+    
+    # ========== Repository state operations ==========
+    
+    def get_current_branch(self) -> str:
+        """Get current branch from database."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT current_branch FROM repository_state WHERE id = 1")
+        row = cursor.fetchone()
+        
+        if row:
+            return row['current_branch'] or 'main'
+        return 'main'
+    
+    def set_current_branch(self, branch_name: str) -> None:
+        """Set current branch in database."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO repository_state (id, current_branch, head)
+            VALUES (1, ?, (SELECT head FROM repository_state WHERE id = 1))
+        """, (branch_name,))
+        self.conn.commit()
+    
+    def get_head(self) -> Optional[str]:
+        """Get HEAD commit hash from database."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT head FROM repository_state WHERE id = 1")
+        row = cursor.fetchone()
+        
+        if row:
+            return row['head']
+        return None
+    
+    def set_head(self, commit_hash: Optional[str]) -> None:
+        """Set HEAD commit hash in database."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO repository_state (id, current_branch, head)
+            VALUES (1, (SELECT current_branch FROM repository_state WHERE id = 1), ?)
+        """, (commit_hash,))
+        self.conn.commit()
+    
+    def set_branch_and_head(self, branch_name: str, commit_hash: Optional[str]) -> None:
+        """Set both current branch and HEAD in one operation."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO repository_state (id, current_branch, head)
+            VALUES (1, ?, ?)
+        """, (branch_name, commit_hash))
         self.conn.commit()
 
 

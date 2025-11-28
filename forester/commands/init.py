@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Optional
 from ..core.database import ForesterDB
 from ..core.ignore import IgnoreRules
-from ..core.metadata import Metadata
 from ..core.storage import ObjectStorage
 
 
@@ -56,11 +55,8 @@ def init_repository(project_path: Path, force: bool = False) -> bool:
     db_path = dfm_dir / "forester.db"
     with ForesterDB(db_path) as db:
         db.initialize_schema()
-    
-    # Initialize metadata
-    metadata_path = dfm_dir / "metadata.json"
-    metadata = Metadata(metadata_path)
-    metadata.initialize(current_branch="main", head=None)
+        # Initialize repository state (current branch and HEAD)
+        db.set_branch_and_head("main", None)
     
     # Create .dfmignore file
     ignore_file = dfm_dir / ".dfmignore"

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from ..core.database import ForesterDB
 from ..core.ignore import IgnoreRules
-from ..core.metadata import Metadata
 from ..core.storage import ObjectStorage
 from ..core.refs import get_current_branch
 from ..models.tree import Tree

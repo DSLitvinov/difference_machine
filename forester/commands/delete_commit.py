@@ -7,7 +7,6 @@ from typing import Tuple, Optional
 from ..core.database import ForesterDB
 from ..core.storage import ObjectStorage
 from ..core.refs import get_branch_ref, set_branch_ref, get_current_branch
-from ..core.metadata import Metadata
 from ..models.commit import Commit
 
 
@@ -40,14 +39,15 @@ def delete_commit(repo_path: Path, commit_hash: str, force: bool = False) -> Tup
             return False, f"Commit {commit_hash[:16]}... not found"
         
         # Check if it's the HEAD commit
-        metadata_path = dfm_dir / "metadata.json"
-        metadata = Metadata(metadata_path)
-        metadata.load()
+        current_branch = get_current_branch(repo_path)
+        if not current_branch:
+            return False, "Cannot determine current branch"
         
-        current_branch = metadata.current_branch
         branch_ref = get_branch_ref(repo_path, current_branch)
         
-        if branch_ref == commit_hash and not force:
+        # Also check HEAD from database
+        head_commit = db.get_head()
+        if (branch_ref == commit_hash or head_commit == commit_hash) and not force:
             return False, "Cannot delete HEAD commit. Use force=True to delete anyway."
         
         # Check if it's referenced by any branch
@@ -64,18 +64,17 @@ def delete_commit(repo_path: Path, commit_hash: str, force: bool = False) -> Tup
         # Delete commit from storage
         storage.delete_commit(commit_hash)
         
-        # Update branch reference if this was the HEAD
-        if branch_ref == commit_hash:
+        # Update branch reference and HEAD if this was the HEAD
+        if branch_ref == commit_hash or head_commit == commit_hash:
             # Find parent commit or set to None
             parent_hash = commit_info.get('parent_hash')
             if parent_hash:
                 set_branch_ref(repo_path, current_branch, parent_hash)
-                metadata.head = parent_hash
+                db.set_head(parent_hash)
             else:
                 # No parent - this was the first commit
                 set_branch_ref(repo_path, current_branch, None)
-                metadata.head = None
-            metadata.save()
+                db.set_head(None)
         
         return True, None
         

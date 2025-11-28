@@ -6,7 +6,6 @@ Manages branches: create, list, delete.
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from ..core.database import ForesterDB
-from ..core.metadata import Metadata
 from ..core.refs import get_branch_ref, set_branch_ref, get_current_branch
 from ..models.commit import Commit
 
@@ -185,7 +184,7 @@ def get_branch_commits(repo_path: Path, branch_name: str) -> List[Dict[str, Any]
 def switch_branch(repo_path: Path, branch_name: str) -> bool:
     """
     Switch to a different branch (without checkout).
-    This only updates metadata, doesn't change working directory.
+    This only updates database, doesn't change working directory.
     
     Args:
         repo_path: Path to repository root
@@ -206,16 +205,18 @@ def switch_branch(repo_path: Path, branch_name: str) -> bool:
     if not ref_file.exists():
         raise ValueError(f"Branch '{branch_name}' does not exist")
     
-    # Update metadata
-    metadata_path = dfm_dir / "metadata.json"
-    metadata = Metadata(metadata_path)
-    metadata.load()
-    metadata.current_branch = branch_name
+    # Update database
+    db_path = dfm_dir / "forester.db"
+    if not db_path.exists():
+        raise ValueError(f"Database not found at {db_path}")
     
-    # Update HEAD commit
+    from ..core.database import ForesterDB
+    
+    # Get branch commit hash
     branch_commit = get_branch_ref(repo_path, branch_name)
-    metadata.head = branch_commit
-    metadata.save()
+    
+    with ForesterDB(db_path) as db:
+        db.set_branch_and_head(branch_name, branch_commit)
     
     return True
 

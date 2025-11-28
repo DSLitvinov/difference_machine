@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Optional, Tuple
 from ..core.database import ForesterDB
 from ..core.ignore import IgnoreRules
-from ..core.metadata import Metadata
 from ..core.storage import ObjectStorage
 from ..core.refs import get_branch_ref, get_current_branch, set_branch_ref
 from ..models.commit import Commit
@@ -95,22 +94,17 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
             # Step 3: Restore meshes from commit
             restore_meshes_from_commit(commit, working_dir, storage, dfm_dir)
         
-        # Step 4: Update metadata
-        if is_branch:
-            # Update current branch
-            metadata_path = dfm_dir / "metadata.json"
-            metadata = Metadata(metadata_path)
-            metadata.load()
-            metadata.current_branch = target
-            metadata.head = commit_hash
-            metadata.save()
-        else:
-            # Detached HEAD state (pointing to commit)
-            metadata_path = dfm_dir / "metadata.json"
-            metadata = Metadata(metadata_path)
-            metadata.load()
-            metadata.head = commit_hash
-            metadata.save()
+        # Step 4: Update database
+        db_path = dfm_dir / "forester.db"
+        if db_path.exists():
+            from ..core.database import ForesterDB
+            with ForesterDB(db_path) as db:
+                if is_branch:
+                    # Update current branch and HEAD
+                    db.set_branch_and_head(target, commit_hash)
+                else:
+                    # Detached HEAD state (pointing to commit)
+                    db.set_head(commit_hash)
         
         return (True, None)
         
