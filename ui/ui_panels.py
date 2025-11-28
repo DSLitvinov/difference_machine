@@ -269,6 +269,17 @@ class DF_PT_branch_panel(Panel):
                         info_row.label(text="Cannot delete the last branch", icon='INFO')
                     elif selected_branch.is_current:
                         info_row.label(text="Cannot delete current branch", icon='INFO')
+        
+        # Utilities section (only if repo initialized and not comparison mode)
+        if not is_comparison_object and repo_initialized:
+            layout.separator()
+            box = layout.box()
+            box.label(text="Utilities", icon='TOOL_SETTINGS')
+            row = box.row()
+            row.scale_y = 1.2
+            op = row.operator("df.rebuild_database", text="Rebuild Database", icon='FILE_REFRESH')
+            box.label(text="Rebuild DB from storage", icon='INFO')
+            box.label(text="(Use if database is corrupted)")
         else:
             # Показываем информационное сообщение для объекта сравнения
             layout.separator()

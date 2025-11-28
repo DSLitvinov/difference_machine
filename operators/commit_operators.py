@@ -653,3 +653,47 @@ class DF_OT_init_project(Operator):
             self.report({'ERROR'}, f"Failed to initialize repository: {str(e)}")
             return {'CANCELLED'}
 
+
+class DF_OT_rebuild_database(Operator):
+    """Rebuild database from storage."""
+    bl_idname = "df.rebuild_database"
+    bl_label = "Rebuild Database"
+    bl_description = "Rebuild database from file system storage (use if database is corrupted)"
+    bl_options = {'REGISTER'}
+    
+    def invoke(self, context, event):
+        """Invoke with confirmation dialog."""
+        return context.window_manager.invoke_confirm(self, event)
+    
+    def execute(self, context):
+        """Execute the operator."""
+        blend_file = Path(bpy.data.filepath)
+        if not blend_file:
+            self.report({'ERROR'}, "Please save the Blender file first")
+            return {'CANCELLED'}
+        
+        repo_path = find_repository(blend_file.parent)
+        if not repo_path:
+            self.report({'ERROR'}, "Not a Forester repository")
+            return {'CANCELLED'}
+        
+        try:
+            from ..forester.commands.rebuild_database import rebuild_database
+            
+            self.report({'INFO'}, "Rebuilding database from storage...")
+            success, error = rebuild_database(repo_path, backup=True)
+            
+            if success:
+                self.report({'INFO'}, "Database rebuilt successfully")
+                # Refresh UI
+                bpy.ops.df.refresh_branches()
+                bpy.ops.df.refresh_history()
+                return {'FINISHED'}
+            else:
+                self.report({'ERROR'}, f"Failed to rebuild database: {error}")
+                return {'CANCELLED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to rebuild database: {str(e)}")
+            logger.error(f"Failed to rebuild database: {e}", exc_info=True)
+            return {'CANCELLED'}
+
