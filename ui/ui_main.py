@@ -3,6 +3,7 @@ Main UI module for Difference Machine add-on.
 Contains panels and menus registration.
 """
 import bpy
+import logging
 from .ui_panels import (
     DF_PT_commit_panel,
     DF_PT_history_panel,
@@ -41,6 +42,9 @@ from ..operators.branch_operators import (
 from ..operators.export_operators import (
     DF_OT_toggle_export_component,
 )
+
+logger = logging.getLogger(__name__)
+
 # Classes list for registration
 classes = [
     # UI Lists
@@ -85,7 +89,7 @@ def register():
         for cls in classes:
             bpy.utils.register_class(cls)
     except Exception as e:
-        print(f"Error registering UI classes: {e}")
+        logger.error(f"Error registering UI classes: {e}", exc_info=True)
         raise
 
 
@@ -95,5 +99,5 @@ def unregister():
         for cls in reversed(classes):
             bpy.utils.unregister_class(cls)
     except Exception as e:
-        print(f"Error unregistering UI classes: {e}")
+        logger.error(f"Error unregistering UI classes: {e}", exc_info=True)
         raise
