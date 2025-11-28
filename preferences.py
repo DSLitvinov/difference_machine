@@ -1,6 +1,7 @@
 import bpy
 from bpy.types import AddonPreferences
 from bpy.props import StringProperty, IntProperty
+from pathlib import Path
 
 
 class DifferenceMachinePreferences(AddonPreferences):
@@ -31,6 +32,31 @@ class DifferenceMachinePreferences(AddonPreferences):
         box = layout.box()
         box.label(text="Auto-compress Settings", icon='PACKAGE')
         box.prop(self, "auto_compress_keep_last_n")
+        
+        # Database maintenance
+        box = layout.box()
+        box.label(text="Database Maintenance", icon='TOOL_SETTINGS')
+        
+        # Check if repository exists
+        blend_file = Path(bpy.data.filepath) if bpy.data.filepath else None
+        repo_exists = False
+        if blend_file:
+            try:
+                from .forester.commands.init import find_repository
+                repo_path = find_repository(blend_file.parent)
+                repo_exists = repo_path is not None
+            except Exception:
+                pass
+        
+        if repo_exists:
+            row = box.row()
+            row.scale_y = 1.5
+            op = row.operator("df.rebuild_database", text="Rebuild Database", icon='FILE_REFRESH')
+            box.label(text="Rebuild database from storage", icon='INFO')
+            box.label(text="(Use if database is corrupted)")
+        else:
+            box.label(text="Save Blender file to enable", icon='INFO')
+            box.label(text="database maintenance tools")
 
 
 def register():
