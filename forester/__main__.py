@@ -236,6 +236,30 @@ def cmd_status(args):
         return 1
 
 
+def cmd_rebuild(args):
+    """Handle rebuild command."""
+    repo_path = find_repository(Path.cwd())
+    if not repo_path:
+        print("Error: Not a Forester repository")
+        return 1
+    
+    try:
+        from .commands.rebuild_database import rebuild_database
+        
+        print("Rebuilding database from storage...")
+        success, error = rebuild_database(repo_path, backup=not args.no_backup)
+        
+        if success:
+            print("Database rebuilt successfully")
+            return 0
+        else:
+            print(f"Error: {error}")
+            return 1
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -296,6 +320,11 @@ def main():
     # Status command
     subparsers.add_parser("status", help="Show repository status")
     
+    # Rebuild command
+    rebuild_parser = subparsers.add_parser("rebuild", help="Rebuild database from storage")
+    rebuild_parser.add_argument("--no-backup", action="store_true", 
+                               help="Don't create backup of existing database")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -315,6 +344,8 @@ def main():
         return cmd_stash(args)
     elif args.command == "status":
         return cmd_status(args)
+    elif args.command == "rebuild":
+        return cmd_rebuild(args)
     else:
         parser.print_help()
         return 1

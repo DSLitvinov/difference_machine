@@ -64,6 +64,11 @@ class DF_OT_create_project_commit(Operator):
             
             if commit_hash:
                 self.report({'INFO'}, f"Commit created: {commit_hash[:16]}...")
+                
+                # Check and run automatic garbage collection if enabled
+                from .operator_helpers import check_and_run_garbage_collect
+                check_and_run_garbage_collect(context, repo_path)
+                
                 # Refresh branches list (commit count may have changed)
                 bpy.ops.df.refresh_branches(update_index=False)
                 # Refresh commit history
@@ -183,8 +188,8 @@ class DF_OT_create_mesh_commit(Operator):
             if commit_hash:
                 self.report({'INFO'}, f"Mesh commit created: {commit_hash[:16]}...")
                 
-                # Auto-compress if enabled
-                if props.auto_compress:
+                # Auto-compress if enabled (use preference setting)
+                if prefs.auto_compress:
                     mesh_names = [data['mesh_name'] for data in mesh_data_list]
                     deleted = auto_compress_mesh_commits(
                         repo_path=repo_path,
@@ -193,6 +198,10 @@ class DF_OT_create_mesh_commit(Operator):
                     )
                     if deleted > 0:
                         self.report({'INFO'}, f"Compressed {deleted} old commits")
+                
+                # Check and run automatic garbage collection if enabled
+                from .operator_helpers import check_and_run_garbage_collect
+                check_and_run_garbage_collect(context, repo_path)
                 
                 # Refresh branches list (commit count may have changed)
                 bpy.ops.df.refresh_branches(update_index=False)
@@ -651,5 +660,108 @@ class DF_OT_init_project(Operator):
             return {'FINISHED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to initialize repository: {str(e)}")
+            return {'CANCELLED'}
+
+
+class DF_OT_rebuild_database(Operator):
+    """Rebuild database from storage."""
+    bl_idname = "df.rebuild_database"
+    bl_label = "Rebuild Database"
+    bl_description = "Rebuild database from file system storage (use if database is corrupted)"
+    bl_options = {'REGISTER'}
+    
+    def invoke(self, context, event):
+        """Invoke with confirmation dialog."""
+        return context.window_manager.invoke_confirm(self, event)
+    
+    def execute(self, context):
+        """Execute the operator."""
+        blend_file = Path(bpy.data.filepath)
+        if not blend_file:
+            self.report({'ERROR'}, "Please save the Blender file first")
+            return {'CANCELLED'}
+        
+        repo_path = find_repository(blend_file.parent)
+        if not repo_path:
+            self.report({'ERROR'}, "Not a Forester repository")
+            return {'CANCELLED'}
+        
+        try:
+            from ..forester.commands.rebuild_database import rebuild_database
+            
+            self.report({'INFO'}, "Rebuilding database from storage...")
+            success, error = rebuild_database(repo_path, backup=True)
+            
+            if success:
+                self.report({'INFO'}, "Database rebuilt successfully")
+                # Refresh UI
+                bpy.ops.df.refresh_branches()
+                bpy.ops.df.refresh_history()
+                return {'FINISHED'}
+            else:
+                self.report({'ERROR'}, f"Failed to rebuild database: {error}")
+                return {'CANCELLED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to rebuild database: {str(e)}")
+            logger.error(f"Failed to rebuild database: {e}", exc_info=True)
+            return {'CANCELLED'}
+
+
+class DF_OT_garbage_collect(Operator):
+    """Garbage collect unused objects."""
+    bl_idname = "df.garbage_collect"
+    bl_label = "Garbage Collect"
+    bl_description = "Remove unused objects from storage (not referenced by any commits)"
+    bl_options = {'REGISTER'}
+    
+    dry_run: bpy.props.BoolProperty(
+        name="Dry Run",
+        description="Show what would be deleted without actually deleting",
+        default=False,
+    )
+    
+    def invoke(self, context, event):
+        """Invoke with confirmation dialog."""
+        if not self.dry_run:
+            return context.window_manager.invoke_confirm(self, event)
+        return self.execute(context)
+    
+    def execute(self, context):
+        """Execute the operator."""
+        blend_file = Path(bpy.data.filepath)
+        if not blend_file:
+            self.report({'ERROR'}, "Please save the Blender file first")
+            return {'CANCELLED'}
+        
+        repo_path = find_repository(blend_file.parent)
+        if not repo_path:
+            self.report({'ERROR'}, "Not a Forester repository")
+            return {'CANCELLED'}
+        
+        try:
+            from ..forester.commands.garbage_collect import garbage_collect
+            
+            action = "Analyzing" if self.dry_run else "Cleaning"
+            self.report({'INFO'}, f"{action} unused objects...")
+            
+            success, error, stats = garbage_collect(repo_path, dry_run=self.dry_run)
+            
+            if success:
+                if self.dry_run:
+                    msg = (f"Would delete: {stats['commits_deleted']} commits, "
+                          f"{stats['trees_deleted']} trees, {stats['blobs_deleted']} blobs, "
+                          f"{stats['meshes_deleted']} meshes")
+                else:
+                    msg = (f"Deleted: {stats['commits_deleted']} commits, "
+                          f"{stats['trees_deleted']} trees, {stats['blobs_deleted']} blobs, "
+                          f"{stats['meshes_deleted']} meshes")
+                self.report({'INFO'}, msg)
+                return {'FINISHED'}
+            else:
+                self.report({'ERROR'}, f"Failed: {error}")
+                return {'CANCELLED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed: {str(e)}")
+            logger.error(f"Failed to garbage collect: {e}", exc_info=True)
             return {'CANCELLED'}
 

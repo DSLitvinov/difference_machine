@@ -4,6 +4,7 @@ Helper functions for operators to reduce code duplication.
 
 import bpy
 import logging
+import time
 from pathlib import Path
 from typing import Optional, Tuple
 from ..forester.commands import find_repository, list_branches, init_repository
@@ -29,8 +30,58 @@ def get_addon_preferences(context):
     class DefaultPreferences:
         default_author = "Unknown"
         auto_compress_keep_last_n = 5
+        auto_garbage_collect = False
+        gc_interval_value = 1
+        gc_interval_unit = 'DAYS'
+        gc_last_run = 0.0
     
     return DefaultPreferences()
+
+
+def check_and_run_garbage_collect(context, repo_path: Path) -> None:
+    """
+    Check if garbage collection should run and execute it if needed.
+    
+    Args:
+        context: Blender context
+        repo_path: Path to repository root
+    """
+    try:
+        prefs = get_addon_preferences(context)
+        
+        if not prefs.auto_garbage_collect:
+            return
+        
+        # Calculate interval in seconds
+        interval_seconds = prefs.gc_interval_value
+        if prefs.gc_interval_unit == 'HOURS':
+            interval_seconds *= 3600
+        elif prefs.gc_interval_unit == 'DAYS':
+            interval_seconds *= 86400
+        elif prefs.gc_interval_unit == 'WEEKS':
+            interval_seconds *= 604800
+        
+        # Check if enough time has passed
+        current_time = time.time()
+        last_run = prefs.gc_last_run
+        
+        if last_run == 0.0 or (current_time - last_run) >= interval_seconds:
+            # Run garbage collection
+            from ..forester.commands.garbage_collect import garbage_collect
+            
+            logger.info("Running automatic garbage collection...")
+            success, error, stats = garbage_collect(repo_path, dry_run=False)
+            
+            if success:
+                # Update last run time
+                prefs.gc_last_run = current_time
+                logger.info(f"Garbage collection completed: {stats['commits_deleted']} commits, "
+                          f"{stats['trees_deleted']} trees, {stats['blobs_deleted']} blobs, "
+                          f"{stats['meshes_deleted']} meshes deleted")
+            else:
+                logger.warning(f"Garbage collection failed: {error}")
+    except Exception as e:
+        logger.error(f"Error in automatic garbage collection: {e}", exc_info=True)
 
 
 def get_repository_path(operator=None) -> Tuple[Optional[Path], Optional[str]]:
