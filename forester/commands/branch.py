@@ -35,9 +35,11 @@ def create_branch(repo_path: Path, branch_name: str,
     if ref_file.exists():
         raise ValueError(f"Branch '{branch_name}' already exists")
     
-    # Validate branch name (basic validation)
-    if not branch_name or '/' in branch_name or '\\' in branch_name:
-        raise ValueError(f"Invalid branch name: {branch_name}")
+    # Validate branch name
+    from ..utils.validation import validate_branch_name as validate_name
+    is_valid, error_msg = validate_name(branch_name)
+    if not is_valid:
+        raise ValueError(error_msg or f"Invalid branch name: {branch_name}")
     
     # Get source branch commit
     if from_branch:

@@ -6,9 +6,16 @@ Contains functions for exporting and importing meshes with materials and texture
 import bpy
 import os
 import json
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
+logger = logging.getLogger(__name__)
+
+# Constants
+MAX_TEXTURE_SIZE_MB = 50
+FILE_READ_CHUNK_SIZE = 8192
+DEFAULT_COMPARISON_OFFSET = 2.0
 
 # Node type mapping for special cases where simple conversion doesn't work
 NODE_TYPE_MAP = {
@@ -221,7 +228,7 @@ def _export_node_properties(node, node_data):
         if hasattr(node, 'mute'):
             node_data['properties']['mute'] = node.mute
     except Exception as e:
-        print(f"Warning: Failed to export properties for node {node.name}: {e}")
+        logger.warning(f"Failed to export properties for node {node.name}: {e}")
 
 
 def _export_color_ramp(node, node_data):
@@ -241,7 +248,7 @@ def _export_color_ramp(node, node_data):
             })
         node_data['properties']['color_ramp'] = ramp_data
     except Exception as e:
-        print(f"Warning: Failed to export color ramp for node {node.name}: {e}")
+        logger.warning(f"Failed to export color ramp for node {node.name}: {e}")
 
 
 def _export_curve_data(node, node_data):
@@ -263,7 +270,7 @@ def _export_curve_data(node, node_data):
                 curves_data['curves'].append(curve_points)
             node_data['properties']['mapping'] = curves_data
     except Exception as e:
-        print(f"Warning: Failed to export curve data for node {node.name}: {e}")
+        logger.warning(f"Failed to export curve data for node {node.name}: {e}")
 
 
 def _export_image_texture(node, node_data, texture_map):
@@ -293,7 +300,7 @@ def _export_image_texture(node, node_data, texture_map):
             node_data['was_packed'] = False
             
     except Exception as e:
-        print(f"Warning: Failed to export image texture for node {node.name}: {e}")
+        logger.warning(f"Failed to export image texture for node {node.name}: {e}")
 
 
 def _export_input_sockets(node, node_data):
@@ -323,7 +330,7 @@ def _export_input_sockets(node, node_data):
             }
             node_data['inputs'].append(input_data)
     except Exception as e:
-        print(f"Warning: Failed to export input sockets for node {node.name}: {e}")
+        logger.warning(f"Failed to export input sockets for node {node.name}: {e}")
 
 
 def _export_output_sockets(node, node_data):
@@ -336,7 +343,7 @@ def _export_output_sockets(node, node_data):
             }
             node_data['outputs'].append(output_data)
     except Exception as e:
-        print(f"Warning: Failed to export output sockets for node {node.name}: {e}")
+        logger.warning(f"Failed to export output sockets for node {node.name}: {e}")
 
 
 def get_socket_default_value(socket):
@@ -420,7 +427,7 @@ def load_mesh_from_commit(repo_path: Path, commit_hash: str, mesh_name: str) -> 
                     if 'node_tree' in updated_material_json:
                         mesh.material_json = updated_material_json
                 except Exception as e:
-                    print(f"Warning: Could not reload material.json: {e}")
+                    logger.warning(f"Could not reload material.json: {e}")
         
         return mesh.mesh_json, mesh.material_json, mesh_storage_path
     finally:
@@ -541,7 +548,7 @@ def import_node_tree_structure(node_tree, node_tree_data, textures_info=None, me
     """
     # Check if node_tree is valid
     if not node_tree:
-        print("Error: node_tree is None or invalid")
+        logger.error("node_tree is None or invalid")
         return
     
     # Clear existing nodes (like in difference_engine)
@@ -587,7 +594,7 @@ def import_node_tree_structure(node_tree, node_tree_data, textures_info=None, me
         try:
             node = node_tree.nodes.new(type=node_type)
         except Exception as e:
-            print(f"Failed to create node type '{node_type}' (from '{original_type}'): {e}")
+            logger.warning(f"Failed to create node type '{node_type}' (from '{original_type}'): {e}")
             continue
         
         # Set node properties safely
@@ -655,7 +662,7 @@ def import_node_tree_structure(node_tree, node_tree_data, textures_info=None, me
                 if from_socket and to_socket:
                     node_tree.links.new(from_socket, to_socket)
         except Exception as e:
-            print(f"Failed to create link: {e}")
+            logger.warning(f"Failed to create link: {e}")
 
 
 def _import_image_texture(node, node_data, texture_map, textures_dir):
@@ -707,35 +714,35 @@ def _import_image_texture(node, node_data, texture_map, textures_dir):
             break
     
     if not resolved_path:
-        print(f"Warning: Texture not found for node '{node_name}'. Tried: {candidate_paths}")
+        logger.warning(f"Texture not found for node '{node_name}'. Tried: {candidate_paths}")
     else:
         try:
             file_size_mb = os.path.getsize(resolved_path) / (1024 * 1024)
-            if file_size_mb > 50:
-                print(f"Warning: Loading large texture: {os.path.basename(resolved_path)} ({file_size_mb:.1f} MB)")
+            if file_size_mb > MAX_TEXTURE_SIZE_MB:
+                logger.warning(f"Loading large texture: {os.path.basename(resolved_path)} ({file_size_mb:.1f} MB)")
             
             # Reuse cached image by filename when possible (like in difference_engine)
             cached_name = os.path.basename(resolved_path)
             image = bpy.data.images.get(cached_name)
             if image:
-                print(f"Reusing cached texture: {cached_name}")
+                logger.debug(f"Reusing cached texture: {cached_name}")
                 image.filepath = resolved_path
                 # Force reload to ensure up-to-date display
                 image.reload()
             else:
                 image = bpy.data.images.load(resolved_path)
-                print(f"Loaded new texture from {resolved_path}")
+                logger.debug(f"Loaded new texture from {resolved_path}")
             
             # Assign image to node
             if hasattr(node, 'image'):
                 node.image = image
-                print(f"Assigned texture {cached_name} to node {node.name}")
+                logger.debug(f"Assigned texture {cached_name} to node {node.name}")
             else:
-                print(f"Error: Node {node.name} doesn't have 'image' attribute!")
+                logger.error(f"Node {node.name} doesn't have 'image' attribute!")
+        except (OSError, ValueError, PermissionError) as e:
+            logger.error(f"Failed to load texture {resolved_path}: {e}", exc_info=True)
         except Exception as e:
-            print(f"Failed to load texture {resolved_path}: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error loading texture {resolved_path}: {e}", exc_info=True)
 
 
 def _import_node_properties(node, props):
@@ -749,17 +756,17 @@ def _import_node_properties(node, props):
         try:
             node.interpolation = props['interpolation']
         except Exception as e:
-            print(f"Warning: Failed to set interpolation: {e}")
+            logger.warning(f"Failed to set interpolation: {e}")
     if 'extension' in props and hasattr(node, 'extension'):
         try:
             node.extension = props['extension']
         except Exception as e:
-            print(f"Warning: Failed to set extension: {e}")
+            logger.warning(f"Failed to set extension: {e}")
     if 'color_space' in props and hasattr(node, 'color_space'):
         try:
             node.color_space = props['color_space']
         except Exception as e:
-            print(f"Warning: Failed to set color_space: {e}")
+            logger.warning(f"Failed to set color_space: {e}")
     if 'label' in props:
         node.label = props['label']
     if 'hide' in props:
@@ -773,9 +780,9 @@ def _import_node_properties(node, props):
         # Try to find the node group in the blend file
         if node_tree_name in bpy.data.node_groups:
             node.node_tree = bpy.data.node_groups[node_tree_name]
-            print(f"Restored Group node reference: {node_tree_name}")
+            logger.debug(f"Restored Group node reference: {node_tree_name}")
         else:
-            print(f"Warning: Node group '{node_tree_name}' not found in blend file - Group node will be empty")
+            logger.warning(f"Node group '{node_tree_name}' not found in blend file - Group node will be empty")
     
     # ColorRamp restoration
     if 'color_ramp' in props and hasattr(node, 'color_ramp'):
@@ -846,34 +853,34 @@ def load_textures_to_material(material, textures_info, mesh_storage_path):
         mesh_storage_path: Путь к директории меша (где хранятся текстуры)
     """
     if not material.node_tree:
-        print("Material has no node tree")
+        logger.warning("Material has no node tree")
         return
     
-    print(f"Loading textures for material: {material.name}")
-    print(f"Mesh storage path: {mesh_storage_path}")
-    print(f"Textures info count: {len(textures_info)}")
+    logger.debug(f"Loading textures for material: {material.name}")
+    logger.debug(f"Mesh storage path: {mesh_storage_path}")
+    logger.debug(f"Textures info count: {len(textures_info)}")
     
-    # Debug: print all nodes in material
-    print(f"Nodes in material: {[n.name + ' (' + n.type + ')' for n in material.node_tree.nodes]}")
+    # Debug: log all nodes in material
+    logger.debug(f"Nodes in material: {[n.name + ' (' + n.type + ')' for n in material.node_tree.nodes]}")
     
     for texture_info in textures_info:
         node_name = texture_info.get('node_name')
         if not node_name:
-            print(f"Skipping texture: no node_name")
+            logger.warning("Skipping texture: no node_name")
             continue
         
-        print(f"Looking for texture node: {node_name}")
+        logger.debug(f"Looking for texture node: {node_name}")
         
         # Находим узел текстуры в node tree
         texture_node = None
         for node in material.node_tree.nodes:
             if node.name == node_name and node.type == 'TEX_IMAGE':
                 texture_node = node
-                print(f"Found texture node: {node.name}")
+                logger.debug(f"Found texture node: {node.name}")
                 break
         
         if not texture_node:
-            print(f"Warning: Texture node '{node_name}' not found in material node tree")
+            logger.warning(f"Texture node '{node_name}' not found in material node tree")
             continue
         
         # Определяем путь к текстуре
@@ -881,11 +888,11 @@ def load_textures_to_material(material, textures_info, mesh_storage_path):
         if texture_info.get('copied') and texture_info.get('commit_path'):
             # Текстура скопирована в коммит
             texture_path = mesh_storage_path / texture_info['commit_path']
-            print(f"Using copied texture path: {texture_path}")
+            logger.debug(f"Using copied texture path: {texture_path}")
         elif texture_info.get('original_path'):
             # Используем оригинальный путь
             texture_path = Path(bpy.path.abspath(texture_info['original_path']))
-            print(f"Using original texture path: {texture_path}")
+            logger.debug(f"Using original texture path: {texture_path}")
         
         # Загружаем текстуру
         if texture_path and texture_path.exists() and texture_path.is_file():
@@ -895,31 +902,32 @@ def load_textures_to_material(material, textures_info, mesh_storage_path):
             
             if not image:
                 try:
-                    print(f"Loading texture: {texture_path}")
+                    logger.debug(f"Loading texture: {texture_path}")
                     image = bpy.data.images.load(str(texture_path))
                     image.name = image_name
-                    print(f"Texture loaded: {image.name}")
+                    logger.debug(f"Texture loaded: {image.name}")
+                except (OSError, ValueError, PermissionError) as e:
+                    logger.error(f"Failed to load texture {texture_path}: {e}", exc_info=True)
+                    continue
                 except Exception as e:
-                    print(f"Failed to load texture {texture_path}: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    logger.error(f"Unexpected error loading texture {texture_path}: {e}", exc_info=True)
                     continue
             else:
                 # Обновляем путь если изменился
                 if image.filepath != str(texture_path):
                     image.filepath = str(texture_path)
                     image.reload()
-                print(f"Using existing texture: {image.name}")
+                logger.debug(f"Using existing texture: {image.name}")
             
             # Назначаем текстуру узлу
             if hasattr(texture_node, 'image'):
                 texture_node.image = image
-                print(f"Assigned texture {image.name} to node {texture_node.name}")
+                logger.debug(f"Assigned texture {image.name} to node {texture_node.name}")
             else:
-                print(f"Error: Texture node {texture_node.name} has no 'image' attribute")
+                logger.error(f"Texture node {texture_node.name} has no 'image' attribute")
         else:
             if texture_path:
-                print(f"Warning: Texture path does not exist: {texture_path}")
+                logger.warning(f"Texture path does not exist: {texture_path}")
             else:
-                print(f"Warning: No texture path found for node {node_name}")
+                logger.warning(f"No texture path found for node {node_name}")
 

@@ -7,6 +7,9 @@ import hashlib
 from pathlib import Path
 from typing import Union
 
+# Constants
+FILE_READ_CHUNK_SIZE = 8192  # 8KB chunks for reading files
+
 
 def compute_hash(data: bytes) -> str:
     """
@@ -45,7 +48,7 @@ def compute_file_hash(file_path: Path) -> str:
     
     # Read file in chunks to handle large files efficiently
     with open(file_path, 'rb') as f:
-        while chunk := f.read(8192):  # 8KB chunks
+        while chunk := f.read(FILE_READ_CHUNK_SIZE):
             sha256.update(chunk)
     
     return sha256.hexdigest()

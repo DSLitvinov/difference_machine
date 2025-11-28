@@ -4,6 +4,7 @@ Creates commits only for selected meshes.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from ..core.database import ForesterDB
@@ -15,6 +16,8 @@ from ..models.commit import Commit
 from ..models.mesh import Mesh
 from ..models.blob import Blob
 from ..core.hashing import compute_hash
+
+logger = logging.getLogger(__name__)
 
 
 def create_mesh_only_commit(
@@ -57,10 +60,8 @@ def create_mesh_only_commit(
     
     # Initialize components
     db_path = dfm_dir / "forester.db"
-    db = ForesterDB(db_path)
-    db.connect()
     
-    try:
+    with ForesterDB(db_path) as db:
         storage = ObjectStorage(dfm_dir)
         working_dir = repo_path / "working"
         if not working_dir.exists():
@@ -159,12 +160,20 @@ def create_mesh_only_commit(
                             # Copy texture file
                             original_path = texture_info.get('original_path')
                             if original_path:
-                                # Convert relative path to absolute
-                                if not os.path.isabs(original_path):
-                                    # Try to resolve relative to working directory
-                                    abs_path = (working_dir / original_path).resolve()
-                                else:
-                                    abs_path = Path(original_path)
+                                # Convert relative path to absolute with proper normalization
+                                try:
+                                    if os.path.isabs(original_path):
+                                        abs_path = Path(original_path).resolve()
+                                    else:
+                                        # Resolve relative to working directory
+                                        abs_path = (working_dir / original_path).resolve()
+                                    # Additional safety check
+                                    if not abs_path.exists():
+                                        logger.warning(f"Texture path does not exist: {abs_path}")
+                                        continue
+                                except (OSError, ValueError) as e:
+                                    logger.warning(f"Invalid texture path '{original_path}': {e}")
+                                    continue
                                 
                                 if abs_path.exists() and abs_path.is_file():
                                     texture_filename = abs_path.name
@@ -312,7 +321,6 @@ def create_mesh_only_commit(
                 parent_commit = Commit.from_storage(parent_hash, db, storage)
                 if parent_commit and parent_commit.tree_hash == tree.hash:
                     # No changes detected
-                    db.close()
                     return None
         
         # Save tree
@@ -341,9 +349,6 @@ def create_mesh_only_commit(
         db.set_head(commit.hash)
         
         return commit.hash
-        
-    finally:
-        db.close()
 
 
 def filter_mesh_data(mesh_json: Dict[str, Any], export_options: Dict[str, bool]) -> Dict[str, Any]:

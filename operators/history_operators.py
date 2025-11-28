@@ -3,6 +3,7 @@ Operators for commit history operations.
 """
 
 import bpy
+import logging
 from bpy.types import Operator
 from bpy.props import StringProperty, IntProperty
 from pathlib import Path
@@ -19,6 +20,8 @@ from .mesh_io import (
     import_node_tree_structure,
 )
 from .operator_helpers import get_repository_path, get_active_mesh_object
+
+logger = logging.getLogger(__name__)
 class DF_OT_select_commit(Operator):
     """Select a commit in the history list."""
     bl_idname = "df.select_commit"
@@ -78,10 +81,13 @@ class DF_OT_checkout_commit(Operator):
             else:
                 self.report({'ERROR'}, f"Failed to checkout: {error}")
                 return {'CANCELLED'}
+        except (ValueError, FileNotFoundError) as e:
+            self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
+            logger.error(f"Failed to checkout commit: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error during checkout: {e}", exc_info=True)
             return {'CANCELLED'}
 
 
@@ -115,10 +121,13 @@ class DF_OT_open_project_state(Operator):
             if not success:
                 self.report({'ERROR'}, f"Failed to checkout: {error}")
                 return {'CANCELLED'}
+        except (ValueError, FileNotFoundError) as e:
+            self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
+            logger.error(f"Failed to checkout commit: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error during checkout: {e}", exc_info=True)
             return {'CANCELLED'}
 
         # Step 2: locate target .blend in working directory
@@ -135,10 +144,13 @@ class DF_OT_open_project_state(Operator):
         try:
             bpy.ops.wm.open_mainfile(filepath=str(target_blend))
             return {'FINISHED'}
+        except (OSError, ValueError, PermissionError) as e:
+            self.report({'ERROR'}, f"Failed to open .blend file: {str(e)}")
+            logger.error(f"Failed to open .blend file: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to open .blend file: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error opening .blend file: {e}", exc_info=True)
             return {'CANCELLED'}
 
 
@@ -183,8 +195,12 @@ class DF_OT_compare_project(Operator):
                     try:
                         shutil.rmtree(temp_working_dir)
                         self.report({'INFO'}, "Temporary files removed")
+                    except (OSError, PermissionError) as e:
+                        self.report({'WARNING'}, f"Could not remove temp directory: {str(e)}")
+                        logger.warning(f"Could not remove temp directory: {e}", exc_info=True)
                     except Exception as e:
                         self.report({'WARNING'}, f"Could not remove temp directory: {str(e)}")
+                        logger.error(f"Unexpected error removing temp directory: {e}", exc_info=True)
                 
                 # Clear comparison state
                 scene.df_project_comparison_active = False
@@ -252,13 +268,25 @@ class DF_OT_compare_project(Operator):
             finally:
                 db.close()
             
-        except Exception as e:
+        except (ValueError, FileNotFoundError) as e:
             self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Failed to checkout commit: {e}", exc_info=True)
             # Clean up on error
             if temp_working_dir.exists():
-                shutil.rmtree(temp_working_dir)
+                try:
+                    shutil.rmtree(temp_working_dir)
+                except Exception:
+                    pass
+            return {'CANCELLED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
+            logger.error(f"Unexpected error during checkout: {e}", exc_info=True)
+            # Clean up on error
+            if temp_working_dir.exists():
+                try:
+                    shutil.rmtree(temp_working_dir)
+                except Exception:
+                    pass
             return {'CANCELLED'}
         
         # Step 2: Locate target .blend in temp directory (search recursively)
@@ -306,13 +334,25 @@ class DF_OT_compare_project(Operator):
             self.report({'INFO'}, f"Opening commit in new Blender window")
             return {'FINISHED'}
             
-        except Exception as e:
+        except (OSError, ValueError, PermissionError) as e:
             self.report({'ERROR'}, f"Failed to open Blender: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Failed to open Blender: {e}", exc_info=True)
             # Clean up on error
             if temp_working_dir.exists():
-                shutil.rmtree(temp_working_dir)
+                try:
+                    shutil.rmtree(temp_working_dir)
+                except Exception:
+                    pass
+            return {'CANCELLED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to open Blender: {str(e)}")
+            logger.error(f"Unexpected error opening Blender: {e}", exc_info=True)
+            # Clean up on error
+            if temp_working_dir.exists():
+                try:
+                    shutil.rmtree(temp_working_dir)
+                except Exception:
+                    pass
             return {'CANCELLED'}
 
 
@@ -348,10 +388,13 @@ class DF_OT_delete_commit(Operator):
             else:
                 self.report({'ERROR'}, f"Failed to delete commit: {error}")
                 return {'CANCELLED'}
+        except (ValueError, FileNotFoundError) as e:
+            self.report({'ERROR'}, f"Failed to delete commit: {str(e)}")
+            logger.error(f"Failed to delete commit: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to delete commit: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error deleting commit: {e}", exc_info=True)
             return {'CANCELLED'}
 
 
@@ -388,10 +431,13 @@ class DF_OT_load_mesh_version(Operator):
             
             self.report({'INFO'}, f"Loaded mesh '{self.mesh_name}' from commit")
             return {'FINISHED'}
+        except (ValueError, FileNotFoundError, KeyError) as e:
+            self.report({'ERROR'}, f"Failed to load mesh: {str(e)}")
+            logger.error(f"Failed to load mesh: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to load mesh: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error loading mesh: {e}", exc_info=True)
             return {'CANCELLED'}
 
 
@@ -436,10 +482,13 @@ class DF_OT_replace_mesh(Operator):
             
             self.report({'INFO'}, f"Replaced mesh '{mesh_name}' with version from commit")
             return {'FINISHED'}
+        except (ValueError, FileNotFoundError, KeyError) as e:
+            self.report({'ERROR'}, f"Failed to replace mesh: {str(e)}")
+            logger.error(f"Failed to replace mesh: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to replace mesh: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error replacing mesh: {e}", exc_info=True)
             return {'CANCELLED'}
 
 
@@ -558,10 +607,13 @@ class DF_OT_compare_mesh(Operator):
             
             self.report({'INFO'}, f"Comparison mode enabled (offset +{self.offset_distance} on {self.axis} axis)")
             return {'FINISHED'}
+        except (ValueError, FileNotFoundError, KeyError) as e:
+            self.report({'ERROR'}, f"Failed to compare mesh: {str(e)}")
+            logger.error(f"Failed to compare mesh: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to compare mesh: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error comparing mesh: {e}", exc_info=True)
             return {'CANCELLED'}
 
 
@@ -665,8 +717,11 @@ class DF_OT_switch_comparison_axis(Operator):
             
             self.report({'INFO'}, f"Comparison axis switched to {self.axis} (offset +{offset_distance})")
             return {'FINISHED'}
+        except (ValueError, FileNotFoundError, KeyError) as e:
+            self.report({'ERROR'}, f"Failed to switch comparison axis: {str(e)}")
+            logger.error(f"Failed to switch comparison axis: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to switch comparison axis: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error switching comparison axis: {e}", exc_info=True)
             return {'CANCELLED'}

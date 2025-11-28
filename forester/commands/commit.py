@@ -3,6 +3,7 @@ Commit command for Forester.
 Creates a new commit from current working directory state.
 """
 
+import logging
 from pathlib import Path
 from typing import Optional, List
 from ..core.database import ForesterDB
@@ -13,6 +14,8 @@ from ..models.tree import Tree
 from ..models.commit import Commit
 from ..models.mesh import Mesh
 from ..utils.filesystem import scan_directory
+
+logger = logging.getLogger(__name__)
 
 
 def create_commit(repo_path: Path, message: str, author: str = "Unknown") -> Optional[str]:
@@ -44,10 +47,8 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown") -> Opt
     
     # Initialize components
     db_path = dfm_dir / "forester.db"
-    db = ForesterDB(db_path)
-    db.connect()
     
-    try:
+    with ForesterDB(db_path) as db:
         storage = ObjectStorage(dfm_dir)
         ignore_file = dfm_dir / ".dfmignore"
         ignore_rules = IgnoreRules(ignore_file)
@@ -100,9 +101,13 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown") -> Opt
                     size=blob.size
                 )
                 tree_entries.append(entry)
-            except Exception as e:
+            except (OSError, ValueError, PermissionError) as e:
                 # Skip files that can't be processed
-                print(f"Warning: Skipping file {file_path}: {e}")
+                logger.warning(f"Skipping file {file_path}: {e}")
+                continue
+            except Exception as e:
+                # Unexpected error - log and continue
+                logger.error(f"Unexpected error processing file {file_path}: {e}", exc_info=True)
                 continue
         
         # Step 3: Scan meshes directory
@@ -130,9 +135,13 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown") -> Opt
                     mesh = Mesh.from_directory(mesh_dir, dfm_dir, db, storage)
                     if mesh:
                         mesh_hashes.append(mesh.hash)
-                except Exception as e:
+                except (OSError, ValueError, PermissionError) as e:
                     # Skip meshes that can't be processed
-                    print(f"Warning: Skipping mesh {mesh_dir}: {e}")
+                    logger.warning(f"Skipping mesh {mesh_dir}: {e}")
+                    continue
+                except Exception as e:
+                    # Unexpected error - log and continue
+                    logger.error(f"Unexpected error processing mesh {mesh_dir}: {e}", exc_info=True)
                     continue
         
         # Step 4: Create tree object
@@ -147,7 +156,6 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown") -> Opt
                 parent_commit = Commit.from_storage(parent_hash, db, storage)
                 if parent_commit and parent_commit.tree_hash == tree.hash:
                     # No changes detected
-                    db.close()
                     return None
         
         # Save tree
@@ -173,9 +181,6 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown") -> Opt
         db.set_head(commit.hash)
         
         return commit.hash
-        
-    finally:
-        db.close()
 
 
 def has_uncommitted_changes(repo_path: Path) -> bool:

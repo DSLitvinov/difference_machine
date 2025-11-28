@@ -3,9 +3,12 @@ Operators for commit operations in Difference Machine.
 """
 
 import bpy
+import logging
 from bpy.types import Operator
 from bpy.props import StringProperty
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from ..forester.commands import (
     find_repository,
@@ -34,33 +37,10 @@ class DF_OT_create_project_commit(Operator):
 
     def execute(self, context):
         """Execute the operator."""
-        # Find repository
-        if not bpy.data.filepath:
-            self.report({'ERROR'}, "Please save the Blender file first")
-            return {'CANCELLED'}
-        
-        blend_file = Path(bpy.data.filepath)
-        # Determine project root (directory containing .blend file)
-        project_root = blend_file.parent
-        
-        # Check if repository exists
-        repo_path = find_repository(project_root)
+        # Ensure repository and branch are ready
+        from .operator_helpers import ensure_repository_and_branch
+        repo_path, error = ensure_repository_and_branch(context, self)
         if not repo_path:
-            # Initialize repository
-            try:
-                init_repository(project_root)
-                repo_path = project_root
-                self.report({'INFO'}, "Repository initialized")
-            except Exception as e:
-                self.report({'ERROR'}, f"Failed to initialize repository: {str(e)}")
-                return {'CANCELLED'}
-        
-        # Check if branches exist
-        branches = list_branches(repo_path)
-        if len(branches) == 0:
-            self.report({'ERROR'}, 
-                "No branches found. Please create a branch first.\n"
-                "Go to Branch Management panel and click 'Create New Branch'.")
             return {'CANCELLED'}
         
         # Get current branch from repository
@@ -68,22 +48,6 @@ class DF_OT_create_project_commit(Operator):
         
         # Get properties
         props = context.scene.df_commit_props
-        
-        # Ensure branch exists (create if needed)
-        branch_ref = get_branch_ref(repo_path, branch_name)
-        if branch_ref is None:
-            # Branch doesn't exist, create it
-            try:
-                create_branch(repo_path, branch_name)
-                # Update current branch in database
-                db_path = repo_path / ".DFM" / "forester.db"
-                if db_path.exists():
-                    with ForesterDB(db_path) as db:
-                        db.set_current_branch(branch_name)
-                self.report({'INFO'}, f"Branch '{branch_name}' created")
-            except ValueError:
-                # Branch might already exist (race condition), that's okay
-                pass
         
         # Get author from preferences (always use settings, fallback to "Unknown" if empty)
         from .operator_helpers import get_addon_preferences
@@ -104,10 +68,13 @@ class DF_OT_create_project_commit(Operator):
             else:
                 self.report({'INFO'}, "No changes to commit")
                 return {'CANCELLED'}
+        except (ValueError, FileNotFoundError, PermissionError) as e:
+            self.report({'ERROR'}, f"Failed to create commit: {str(e)}")
+            logger.error(f"Failed to create project commit: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to create commit: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error creating project commit: {e}", exc_info=True)
             return {'CANCELLED'}
 
 
@@ -255,10 +222,12 @@ class DF_OT_refresh_history(Operator):
             context.scene.df_commits.clear()
             return {'FINISHED'}
         
-        # Get current branch from repository
-        branch_name = get_current_branch(repo_path) or "main"
+        # Get current branch from database (source of truth)
+        branch_name = get_current_branch(repo_path)
+        if not branch_name:
+            branch_name = "main"  # Fallback
         
-        # Get commits from forester
+        # Get commits from database for current branch
         try:
             commits_data = get_branch_commits(repo_path, branch_name)
             
@@ -285,12 +254,15 @@ class DF_OT_refresh_history(Operator):
                 if selected_names:
                     commit_item.selected_mesh_names = ", ".join(selected_names)
             
-            self.report({'INFO'}, f"Loaded {len(commits_data)} commits")
+            self.report({'INFO'}, f"Loaded {len(commits_data)} commits from branch '{branch_name}'")
             return {'FINISHED'}
+        except (ValueError, FileNotFoundError) as e:
+            self.report({'ERROR'}, f"Failed to load commits: {str(e)}")
+            logger.error(f"Failed to load commits: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to load commits: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error loading commits: {e}", exc_info=True)
             return {'CANCELLED'}
 
 
@@ -319,8 +291,12 @@ class DF_OT_refresh_branches(Operator):
         
         # Get branches from forester
         try:
-            branches_data = list_branches(repo_path)
+            # Get current branch from database (source of truth)
             current_branch = get_current_branch(repo_path)
+            if not current_branch:
+                current_branch = "main"  # Fallback
+            
+            branches_data = list_branches(repo_path)
             
             # Clear existing list
             context.scene.df_branches.clear()
@@ -330,13 +306,15 @@ class DF_OT_refresh_branches(Operator):
             for idx, branch_data in enumerate(branches_data):
                 branch_item = context.scene.df_branches.add()
                 branch_item.name = branch_data['name']
-                branch_item.is_current = branch_data.get('current', False) or (branch_data['name'] == current_branch)
+                branch_item.branch_index = idx  # Store index in database list (not displayed)
+                # Use current_branch from database to determine is_current
+                branch_item.is_current = (branch_data['name'] == current_branch)
                 
                 # Track index of current branch
                 if branch_item.is_current:
                     current_branch_index = idx
                 
-                # Get commit count and last commit
+                # Get commit count and last commit from database
                 commits = get_branch_commits(repo_path, branch_data['name'])
                 branch_item.commit_count = len(commits)
                 
@@ -354,10 +332,13 @@ class DF_OT_refresh_branches(Operator):
             
             self.report({'INFO'}, f"Loaded {len(branches_data)} branches")
             return {'FINISHED'}
+        except (ValueError, FileNotFoundError) as e:
+            self.report({'ERROR'}, f"Failed to load branches: {str(e)}")
+            logger.error(f"Failed to load branches: {e}", exc_info=True)
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to load branches: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error loading branches: {e}", exc_info=True)
             return {'CANCELLED'}
 
 
@@ -421,8 +402,8 @@ class DF_OT_create_branch(Operator):
         try:
             create_branch(repo_path, self.branch_name)
             self.report({'INFO'}, f"Branch '{self.branch_name}' created")
-            # Refresh branches list
-            bpy.ops.df.refresh_branches()
+            # Refresh branches list to update indices
+            bpy.ops.df.refresh_branches(update_index=True)
             return {'FINISHED'}
         except ValueError as e:
             self.report({'ERROR'}, str(e))
@@ -440,25 +421,47 @@ class DF_OT_switch_branch(Operator):
     bl_options = {'REGISTER'}
 
     branch_name: StringProperty(name="Branch Name", default="")
+    branch_index: bpy.props.IntProperty(name="Branch Index", default=-1)  # Index from UI element
 
     def invoke(self, context, event):
         """Invoke the operator - use selected branch if no name provided."""
         # If branch_name not provided, use selected branch from list
         if not self.branch_name:
             branches = context.scene.df_branches
-            if (branches and 
-                hasattr(context.scene, 'df_branch_list_index') and
+            if not branches or len(branches) == 0:
+                self.report({'ERROR'}, "No branches available. Please refresh the list.")
+                return {'CANCELLED'}
+            
+            if (hasattr(context.scene, 'df_branch_list_index') and
                 context.scene.df_branch_list_index >= 0 and 
                 context.scene.df_branch_list_index < len(branches)):
-                selected_branch = branches[context.scene.df_branch_list_index]
-                self.branch_name = selected_branch.name
+                selected_index = context.scene.df_branch_list_index
+                selected_branch = branches[selected_index]
                 
-                # Check if trying to switch to the same branch
-                if selected_branch.is_current:
-                    self.report({'INFO'}, f"Already on branch '{self.branch_name}'")
+                # Get branch name from selected item
+                self.branch_name = selected_branch.name
+                self.branch_index = selected_branch.branch_index  # Get index from UI element
+                
+                # Debug: verify we got the right branch
+                if not self.branch_name:
+                    self.report({'ERROR'}, f"Selected branch has no name at index {selected_index}. Available branches: {[b.name for b in branches]}")
                     return {'CANCELLED'}
+                
+                # Additional verification: log what we're about to switch to
+                # This helps debug if the wrong branch is selected
+                
+                # Double-check against database to ensure is_current is accurate
+                # This prevents switching to the same branch
+                blend_file = Path(bpy.data.filepath)
+                if blend_file:
+                    repo_path = find_repository(blend_file.parent)
+                    if repo_path:
+                        current_branch = get_current_branch(repo_path)
+                        if current_branch and current_branch == self.branch_name:
+                            self.report({'INFO'}, f"Already on branch '{self.branch_name}'")
+                            return {'CANCELLED'}
             else:
-                self.report({'ERROR'}, "No branch selected")
+                self.report({'ERROR'}, f"No branch selected. Index: {getattr(context.scene, 'df_branch_list_index', 'N/A')}, Branches: {len(branches)}")
                 return {'CANCELLED'}
         
         return self.execute(context)
@@ -481,6 +484,12 @@ class DF_OT_switch_branch(Operator):
             return {'CANCELLED'}
         
         try:
+            # Verify branch name before switching
+            if not self.branch_name:
+                self.report({'ERROR'}, "Branch name is empty")
+                return {'CANCELLED'}
+            
+            # Switch branch in database
             switch_branch(repo_path, self.branch_name)
             
             # Update props
@@ -488,40 +497,11 @@ class DF_OT_switch_branch(Operator):
             
             self.report({'INFO'}, f"Switched to branch '{self.branch_name}'")
             
-            # Refresh branches list directly (without updating index automatically)
-            # This avoids context issues with bpy.ops
-            if repo_path:
-                    branches_data = list_branches(repo_path)
-                    current_branch = get_current_branch(repo_path)
-                    
-                    # Clear existing list
-                    context.scene.df_branches.clear()
-                    
-                    # Add branches to list
-                    for branch_data in branches_data:
-                        branch_item = context.scene.df_branches.add()
-                        branch_item.name = branch_data['name']
-                        branch_item.is_current = branch_data.get('current', False) or (branch_data['name'] == current_branch)
-                        
-                        # Get commit count and last commit
-                        commits = get_branch_commits(repo_path, branch_data['name'])
-                        branch_item.commit_count = len(commits)
-                        
-                        if commits:
-                            last_commit = commits[-1]
-                            branch_item.last_commit_hash = last_commit.get('hash', '')
-                            branch_item.last_commit_message = last_commit.get('message', 'No message')
-                        else:
-                            branch_item.last_commit_hash = ''
-                            branch_item.last_commit_message = 'No commits'
-                    
-                    # Set index to the branch we just switched to
-                    for idx, branch in enumerate(context.scene.df_branches):
-                        if branch.name == self.branch_name:
-                            context.scene.df_branch_list_index = idx
-                            break
+            # Refresh branches list using the operator to ensure consistency
+            # This will read current_branch from database and update UI properly
+            bpy.ops.df.refresh_branches(update_index=True)
             
-            # Refresh history
+            # Refresh history for the new branch
             bpy.ops.df.refresh_history()
             
             return {'FINISHED'}
@@ -574,8 +554,8 @@ class DF_OT_delete_branch(Operator):
         try:
             delete_branch(repo_path, self.branch_name, force=False)
             self.report({'INFO'}, f"Branch '{self.branch_name}' deleted")
-            # Refresh branches list
-            bpy.ops.df.refresh_branches()
+            # Refresh branches list to update indices
+            bpy.ops.df.refresh_branches(update_index=True)
             return {'FINISHED'}
         except ValueError as e:
             self.report({'ERROR'}, str(e))

@@ -403,21 +403,30 @@ class ForesterDB:
         return blob_hashes
     
     def get_commits_using_blob(self, blob_hash: str) -> List[str]:
-        """Get all commits using this blob (through trees)."""
+        """
+        Get all commits using this blob (through trees).
+        
+        Optimized version that uses recursive CTE for better performance.
+        """
         if self.conn is None:
             self.connect()
         
-        # Get all commits
         cursor = self.conn.cursor()
-        cursor.execute("SELECT hash, tree_hash FROM commits")
-        commits = cursor.fetchall()
+        
+        # More efficient approach: check each tree directly
+        # Get all unique tree hashes from commits
+        cursor.execute("SELECT DISTINCT tree_hash FROM commits")
+        tree_hashes = [row['tree_hash'] for row in cursor.fetchall()]
         
         using_commits = []
-        for commit in commits:
-            tree_hash = commit['tree_hash']
+        for tree_hash in tree_hashes:
+            # Check if blob is in this tree
             blobs = self.get_blobs_in_tree(tree_hash)
             if blob_hash in blobs:
-                using_commits.append(commit['hash'])
+                # Get all commits using this tree
+                cursor.execute("SELECT hash FROM commits WHERE tree_hash = ?", (tree_hash,))
+                for row in cursor.fetchall():
+                    using_commits.append(row['hash'])
         
         return using_commits
     

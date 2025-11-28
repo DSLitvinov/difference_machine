@@ -9,11 +9,16 @@ bl_info = {
     "doc_url": "https://github.com/DSLitvinov/difference_machine",
 }
 
+import logging
 from .ui import ui_main
 from .properties import properties
 from . import preferences
+from .utils.logging_config import setup_logging
 
 def register():
+    # Setup logging
+    setup_logging(log_level=logging.INFO)
+    
     preferences.register()
     properties.register()
     ui_main.register()
