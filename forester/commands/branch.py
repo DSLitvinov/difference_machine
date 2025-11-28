@@ -150,14 +150,14 @@ def delete_branch(repo_path: Path, branch_name: str, force: bool = False) -> boo
     if branch_name == current_branch and not force:
         raise ValueError(f"Cannot delete current branch '{branch_name}'. Use force=True or switch branch first.")
     
-    # Get all commits in branch
-    branch_commit = get_branch_ref(repo_path, branch_name)
-    
     # Delete branch reference file
     ref_file.unlink()
     
     # Note: We don't delete commits here - they may be referenced by other branches
     # Commit deletion is handled separately (see delete_commit command)
+    # The functions from delete_commit module (get_all_commits_used_by_branches,
+    # is_commit_referenced_by_branches, is_commit_head) are available if needed
+    # for future implementation of automatic commit cleanup when deleting branches
     
     return True
 
