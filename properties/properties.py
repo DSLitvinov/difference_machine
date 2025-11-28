@@ -204,6 +204,10 @@ def update_commit_list_index(self, context):
                         shutil.rmtree(temp_working_dir)
                     temp_working_dir.mkdir(parents=True)
                     
+                    # Clean up all other old preview_temp directories (keep current one)
+                    from ..operators.operator_helpers import cleanup_old_preview_temp
+                    cleanup_old_preview_temp(repo_path, keep_current=str(temp_working_dir))
+                    
                     db_path = dfm_dir / "forester.db"
                     with ForesterDB(db_path) as db:
                         storage = ObjectStorage(dfm_dir)

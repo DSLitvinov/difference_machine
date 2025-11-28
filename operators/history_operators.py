@@ -19,7 +19,7 @@ from .mesh_io import (
     import_mesh_to_blender,
     import_node_tree_structure,
 )
-from .operator_helpers import get_repository_path, get_active_mesh_object
+from .operator_helpers import get_repository_path, get_active_mesh_object, cleanup_old_preview_temp
 
 logger = logging.getLogger(__name__)
 class DF_OT_select_commit(Operator):
@@ -93,6 +93,9 @@ class DF_OT_select_commit(Operator):
         if temp_working_dir.exists():
             shutil.rmtree(temp_working_dir)
         temp_working_dir.mkdir(parents=True)
+        
+        # Clean up all other old preview_temp directories (keep current one)
+        cleanup_old_preview_temp(repo_path, keep_current=str(temp_working_dir))
         
         db_path = dfm_dir / "forester.db"
         with ForesterDB(db_path) as db:
