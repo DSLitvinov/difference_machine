@@ -48,6 +48,10 @@ Difference Machine is a Blender add-on that provides Git-like version control fu
   - Automatic garbage collection with configurable intervals (hours/days/weeks)
 - **Auto-compress**: Automatically delete old mesh-only commits when creating new ones
   - Configurable number of commits to keep
+- **Automatic Temp Cleanup**: Automatically removes old preview_temp directories
+  - Cleans up temporary commit preview directories when creating new ones
+  - Removes all old preview directories on addon startup
+  - Prevents accumulation of temporary files and reduces repository size
 
 ## Installation
 
@@ -174,6 +178,7 @@ difference_machine/
 - **Material Export**: Full node tree structure export with texture references
 - **Database Recovery**: Automatic database rebuild from file system storage
 - **Garbage Collection**: Safe removal of unreferenced objects with reference checking
+- **Automatic Cleanup**: Temporary preview directories are automatically cleaned up to prevent repository size growth
 - **Logging**: Comprehensive logging system for debugging and error tracking
 
 ## License
