@@ -38,11 +38,27 @@ All notable changes to the Difference Machine project will be documented in this
   - Branch list refreshes after commit operations
   - Prevents stale UI state
 
+- **CLI Commands `show` and `log`**: Added commands for viewing commit information
+  - `forester show <commit_hash>`: Display commit details and changed files
+    - By default shows only modified (`M`), added (`+`), and deleted (`-`) files compared to parent commit
+    - Use `--full` flag to show all files in the commit
+    - Displays file sizes and change indicators
+  - `forester log [branch]`: Display commit history for a branch
+    - Shows commit hash, message, author, and timestamp
+    - Use `-v` or `--verbose` for detailed output
+    - Defaults to current branch if no branch specified
+
 ### Changed
 - **Branch Switching**: Fixed critical bug where "Already on branch" message appeared incorrectly
   - Improved database synchronization with `PRAGMA wal_checkpoint(TRUNCATE)`
   - Fresh database connections for branch state checks
   - Better error handling and debug logging
+
+- **Commit Display in CLI**: Improved `forester show` command to show only changed files by default
+  - Compares commit tree with parent commit to identify changes
+  - Shows added, modified, and deleted files with clear indicators
+  - Helps users quickly understand what changed in each commit
+  - Use `--full` flag for complete file list (useful for first commit or full audit)
 
 - **Code Quality Improvements**:
   - Replaced all `print()` statements with `logger` calls

@@ -77,13 +77,66 @@ Access add-on preferences via `Edit > Preferences > Extensions > Difference Mach
   - Automatic garbage collection with configurable intervals
 - **Database Maintenance**: Rebuild database from storage if corrupted
 
+### Forester CLI
+
+Difference Machine includes a command-line interface (Forester CLI) for repository operations:
+
+```bash
+# Initialize repository
+forester init
+
+# Create commit
+forester commit -m "Commit message" --author "Author Name"
+
+# View commit details (shows only changed files by default)
+forester show <commit_hash>
+
+# View all files in commit
+forester show --full <commit_hash>
+
+# View commit history
+forester log
+forester log <branch_name>
+forester log -v  # verbose output
+
+# Branch operations
+forester branch list
+forester branch create <name>
+forester branch switch <name>
+forester branch delete <name>
+
+# Checkout commit or branch
+forester checkout <commit_hash_or_branch>
+
+# Stash operations
+forester stash
+forester stash list
+forester stash apply <stash_hash>
+forester stash delete <stash_hash>
+
+# Repository status
+forester status
+
+# Rebuild database
+forester rebuild
+
+# Garbage collection
+forester gc [--dry-run]
+```
+
+**Key Features:**
+- `forester show` by default displays only changed files compared to parent commit (marked with `M` for modified, `+` for added, `-` for deleted)
+- Use `--full` flag to see all files in the commit
+- Content-addressable storage ensures no file duplication - unchanged files are automatically deduplicated
+
 ### Basic Workflow
 
-1. **Initialize Repository**: The add-on automatically initializes a repository when you create your first commit
+1. **Initialize Repository**: The add-on automatically initializes a repository when you create your first commit, or use `forester init`
 2. **Create Commits**: Select mesh objects and create a commit with a message
 3. **Compare Versions**: Use the Compare feature to see differences between versions
 4. **Manage Branches**: Create branches for different variations of your model
 5. **Restore Versions**: Load or replace meshes from previous commits
+6. **View Commit Changes**: Use `forester show <commit_hash>` to see what files changed in a commit
 
 ## Structure
 
@@ -114,7 +167,9 @@ difference_machine/
 ## Technical Details
 
 - **Storage**: Uses SQLite database for metadata and content-addressable object storage for mesh/material data
-- **Hashing**: SHA-256 hashing for content-addressable storage
+- **Hashing**: SHA-256 hashing for content-addressable storage with automatic deduplication
+- **File Deduplication**: Unchanged files are automatically deduplicated - only unique file content is stored
+- **Tree Structure**: Each commit contains a complete snapshot (tree) of all project files, but physical storage deduplicates unchanged files
 - **Texture Handling**: Automatic texture deduplication and path resolution
 - **Material Export**: Full node tree structure export with texture references
 - **Database Recovery**: Automatic database rebuild from file system storage
