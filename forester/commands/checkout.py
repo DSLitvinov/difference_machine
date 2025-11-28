@@ -8,7 +8,7 @@ from typing import Optional, Tuple
 from ..core.database import ForesterDB
 from ..core.ignore import IgnoreRules
 from ..core.storage import ObjectStorage
-from ..core.refs import get_branch_ref, get_current_branch, set_branch_ref
+from ..core.refs import get_branch_ref, get_current_branch, set_branch_ref, get_current_head_commit
 from ..models.commit import Commit
 from ..models.tree import Tree
 from ..models.mesh import Mesh
@@ -59,10 +59,8 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
     
     # Load commit
     db_path = dfm_dir / "forester.db"
-    db = ForesterDB(db_path)
-    db.connect()
     
-    try:
+    with ForesterDB(db_path) as db:
         storage = ObjectStorage(dfm_dir)
         commit = Commit.from_storage(commit_hash, db, storage)
         
@@ -84,9 +82,19 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
             # Mesh-only checkout: restore only selected meshes, don't touch other files
             restore_meshes_from_mesh_only_commit(commit, working_dir, storage, db, dfm_dir)
         else:
-            # Project checkout: full restore
-            # Step 1: Clear working directory (completely, including meshes/)
-            clear_working_directory(working_dir, dfm_dir)
+            # Project checkout: restore files from commit
+            # Step 1: Remove tracked files from current HEAD (if exists) to preserve untracked files
+            current_head = get_current_head_commit(repo_path)
+            if current_head and current_head != commit_hash:
+                # Get current HEAD tree to know which files to remove
+                current_commit = Commit.from_storage(current_head, db, storage)
+                if current_commit:
+                    current_tree = current_commit.get_tree(db, storage)
+                    if current_tree:
+                        remove_tracked_files_from_tree(current_tree, working_dir, dfm_dir)
+            else:
+                # No current HEAD or same commit, just remove files from new commit tree
+                remove_tracked_files_from_tree(tree, working_dir, dfm_dir)
             
             # Step 2: Restore files from tree
             restore_files_from_tree(tree, working_dir, storage, db)
@@ -95,26 +103,22 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
             restore_meshes_from_commit(commit, working_dir, storage, dfm_dir)
         
         # Step 4: Update database
-        db_path = dfm_dir / "forester.db"
-        if db_path.exists():
-            from ..core.database import ForesterDB
-            with ForesterDB(db_path) as db:
-                if is_branch:
-                    # Update current branch and HEAD
-                    db.set_branch_and_head(target, commit_hash)
-                else:
-                    # Detached HEAD state (pointing to commit)
-                    db.set_head(commit_hash)
-        
-        return (True, None)
-        
-    finally:
-        db.close()
+        if is_branch:
+            # Update current branch and HEAD
+            db.set_branch_and_head(target, commit_hash)
+        else:
+            # Detached HEAD state (pointing to commit)
+            db.set_head(commit_hash)
+    
+    return (True, None)
 
 
 def clear_working_directory(working_dir: Path, dfm_dir: Path) -> None:
     """
     Clear working directory completely, excluding .DFM.
+    
+    WARNING: This function deletes ALL files in working directory except .DFM.
+    Use remove_tracked_files_from_tree() instead to preserve untracked files.
     
     Args:
         working_dir: Working directory path
@@ -132,6 +136,43 @@ def clear_working_directory(working_dir: Path, dfm_dir: Path) -> None:
             remove_directory(item)
         else:
             item.unlink()
+
+
+def remove_tracked_files_from_tree(tree: Tree, working_dir: Path, dfm_dir: Path) -> None:
+    """
+    Remove only files that are tracked in the commit tree.
+    This preserves untracked files (like textures) that are not in the commit.
+    
+    Args:
+        tree: Tree object from commit
+        working_dir: Working directory path
+        dfm_dir: .DFM directory path
+    """
+    if not working_dir.exists():
+        return
+    
+    # Remove tracked files and directories that are now empty
+    for entry in tree.entries:
+        if entry.type != "blob":
+            continue
+        
+        dest_path = working_dir / entry.path
+        if dest_path.exists():
+            try:
+                dest_path.unlink()
+                # Try to remove empty parent directories
+                parent = dest_path.parent
+                while parent != working_dir and parent != dfm_dir:
+                    try:
+                        if parent.exists() and not any(parent.iterdir()):
+                            parent.rmdir()
+                            parent = parent.parent
+                        else:
+                            break
+                    except OSError:
+                        break
+            except OSError:
+                pass  # File might already be deleted or in use
 
 
 def restore_files_from_tree(tree: Tree, working_dir: Path, storage: ObjectStorage,
@@ -158,14 +199,24 @@ def restore_files_from_tree(tree: Tree, working_dir: Path, storage: ObjectStorag
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Load blob
-        blob = Blob.from_storage(entry.hash, db, storage)
-        if not blob:
+        try:
+            blob = Blob.from_storage(entry.hash, db, storage)
+            if not blob:
+                print(f"Warning: Blob {entry.hash[:16]}... not found in database, skipping {entry.path}")
+                continue
+            
+            # Load blob data
+            blob_data = blob.load_data(storage)
+            
+            # Copy blob data to destination
+            with open(dest_path, 'wb') as f:
+                f.write(blob_data)
+        except FileNotFoundError as e:
+            print(f"Warning: {e}, skipping {entry.path}")
             continue
-        
-        # Copy blob data to destination
-        blob_data = blob.load_data(storage)
-        with open(dest_path, 'wb') as f:
-            f.write(blob_data)
+        except Exception as e:
+            print(f"Warning: Failed to restore {entry.path}: {e}")
+            continue
 
 
 def restore_meshes_from_mesh_only_commit(commit: Commit, working_dir: Path,
@@ -201,6 +252,7 @@ def restore_meshes_from_mesh_only_commit(commit: Commit, working_dir: Path,
             from ..models.mesh import Mesh
             mesh = Mesh.from_storage(mesh_hash, db, storage)
             if not mesh:
+                print(f"Warning: Mesh {mesh_hash[:16]}... not found in database, skipping {mesh_name}")
                 continue
             
             # Use mesh_hash for directory name (as stored in tree)
@@ -219,6 +271,9 @@ def restore_meshes_from_mesh_only_commit(commit: Commit, working_dir: Path,
             with open(material_json_path, 'w', encoding='utf-8') as f:
                 json.dump(mesh.material_json, f, indent=2, ensure_ascii=False)
                 
+        except FileNotFoundError as e:
+            print(f"Warning: {e}, skipping mesh {mesh_name}")
+            continue
         except Exception as e:
             print(f"Warning: Could not restore mesh {mesh_name}: {e}")
             continue
@@ -249,11 +304,13 @@ def restore_meshes_from_commit(commit: Commit, working_dir: Path,
                 # Load mesh
                 mesh = Mesh.from_storage(mesh_hash, db, storage)
                 if not mesh:
+                    print(f"Warning: Mesh {mesh_hash[:16]}... not found in database, skipping")
                     continue
                 
                 # Get mesh name from database (or use hash as fallback)
                 mesh_info = db.get_mesh(mesh_hash)
                 if not mesh_info:
+                    print(f"Warning: Mesh info {mesh_hash[:16]}... not found in database, skipping")
                     continue
                 
                 # Extract mesh name from path (e.g., "objects/meshes/aa/bb/.../mesh_name")
@@ -275,6 +332,10 @@ def restore_meshes_from_commit(commit: Commit, working_dir: Path,
                 with open(material_json_path, 'w', encoding='utf-8') as f:
                     json.dump(mesh.material_json, f, indent=2, ensure_ascii=False)
                     
+            except FileNotFoundError as e:
+                # Skip meshes that can't be restored
+                print(f"Warning: {e}, skipping mesh {mesh_hash[:8]}...")
+                continue
             except Exception as e:
                 # Skip meshes that can't be restored
                 print(f"Warning: Could not restore mesh {mesh_hash[:8]}...: {e}")

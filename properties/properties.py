@@ -155,6 +155,81 @@ class DFCommitProperties(bpy.types.PropertyGroup):
         }
 
 
+def update_commit_list_index(self, context):
+    """Update callback for commit list index - loads commit to temp folder."""
+    if hasattr(context.scene, 'df_commits') and context.scene.df_commits:
+        index = context.scene.df_commit_list_index
+        if 0 <= index < len(context.scene.df_commits):
+            commit = context.scene.df_commits[index]
+            # Only load project commits to temp folder
+            if commit.commit_type == "project":
+                # Load commit to temp folder directly (without toggling selection)
+                try:
+                    from pathlib import Path
+                    from ..forester.commands import find_repository
+                    from ..forester.core.database import ForesterDB
+                    from ..forester.core.storage import ObjectStorage
+                    from ..forester.models.commit import Commit
+                    from ..forester.commands.checkout import restore_files_from_tree, restore_meshes_from_commit
+                    import shutil
+                    
+                    # Find repository
+                    blend_file = Path(bpy.data.filepath) if bpy.data.filepath else None
+                    if not blend_file:
+                        return
+                    
+                    repo_path = find_repository(blend_file.parent)
+                    if not repo_path:
+                        return
+                    
+                    dfm_dir = repo_path / ".DFM"
+                    temp_dir = dfm_dir / "preview_temp"
+                    temp_dir.mkdir(exist_ok=True)
+                    
+                    # Clean up previous preview if exists
+                    prev_temp_dir = getattr(context.scene, 'df_preview_temp_dir', '')
+                    if prev_temp_dir:
+                        prev_path = Path(prev_temp_dir)
+                        if prev_path.exists() and prev_path != dfm_dir:
+                            try:
+                                shutil.rmtree(prev_path)
+                            except Exception:
+                                pass
+                    
+                    # Create unique temp directory for this commit
+                    temp_working_dir = temp_dir / f"commit_{commit.hash[:16]}"
+                    
+                    # Clean up if exists
+                    if temp_working_dir.exists():
+                        shutil.rmtree(temp_working_dir)
+                    temp_working_dir.mkdir(parents=True)
+                    
+                    db_path = dfm_dir / "forester.db"
+                    with ForesterDB(db_path) as db:
+                        storage = ObjectStorage(dfm_dir)
+                        commit_obj = Commit.from_storage(commit.hash, db, storage)
+                        
+                        if not commit_obj:
+                            return
+                        
+                        # Get tree from commit
+                        tree = commit_obj.get_tree(db, storage)
+                        if not tree:
+                            return
+                        
+                        # Restore files from tree
+                        restore_files_from_tree(tree, temp_working_dir, storage, db)
+                        
+                        # Restore meshes from commit
+                        restore_meshes_from_commit(commit_obj, temp_working_dir, storage, dfm_dir)
+                        
+                        # Store temp directory path in scene
+                        context.scene.df_preview_temp_dir = str(temp_working_dir)
+                        context.scene.df_preview_commit_hash = commit.hash
+                except Exception:
+                    pass  # Silently fail if can't load
+
+
 def register():
     """Register custom properties."""
     # Import and register item classes first
@@ -190,7 +265,11 @@ def register():
     
     # Index properties for UIList
     bpy.types.Scene.df_branch_list_index = bpy.props.IntProperty(name="Branch List Index", default=0)
-    bpy.types.Scene.df_commit_list_index = bpy.props.IntProperty(name="Commit List Index", default=0)
+    bpy.types.Scene.df_commit_list_index = bpy.props.IntProperty(
+        name="Commit List Index", 
+        default=0,
+        update=update_commit_list_index
+    )
     
     # Comparison state (for mesh comparison)
     bpy.types.Scene.df_comparison_active = bpy.props.BoolProperty(
@@ -237,6 +316,17 @@ def register():
     
     bpy.types.Scene.df_project_comparison_temp_dir = bpy.props.StringProperty(
         name="Project Comparison Temp Directory",
+        default="",
+    )
+    
+    # Preview commit state (for loading commit to temp folder on selection)
+    bpy.types.Scene.df_preview_temp_dir = bpy.props.StringProperty(
+        name="Preview Temp Directory",
+        default="",
+    )
+    
+    bpy.types.Scene.df_preview_commit_hash = bpy.props.StringProperty(
+        name="Preview Commit Hash",
         default="",
     )
 
@@ -323,6 +413,19 @@ def unregister():
     if hasattr(bpy.types.Scene, 'df_project_comparison_temp_dir'):
         try:
             del bpy.types.Scene.df_project_comparison_temp_dir
+        except:
+            pass
+    
+    # Unregister preview properties
+    if hasattr(bpy.types.Scene, 'df_preview_temp_dir'):
+        try:
+            del bpy.types.Scene.df_preview_temp_dir
+        except:
+            pass
+    
+    if hasattr(bpy.types.Scene, 'df_preview_commit_hash'):
+        try:
+            del bpy.types.Scene.df_preview_commit_hash
         except:
             pass
     

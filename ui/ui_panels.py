@@ -465,9 +465,16 @@ class DF_PT_history_panel(Panel):
                         op = row.operator("df.delete_commit", text="Delete This Version", icon='TRASH')
                         op.commit_hash = commit.hash
                 else:
-                    # Для обычных коммитов - Open project state, Compare и Delete
+                    # Для обычных коммитов - Checkout, Open project state, Compare и Delete
                     # Скрываем кнопки, если активен объект сравнения
                     if not is_comparison_object:
+                        # Checkout button (explicit checkout to working directory)
+                        layout.separator()
+                        row = layout.row()
+                        row.scale_y = 1.5
+                        op = row.operator("df.checkout_commit", text="Checkout to Working Directory", icon='CHECKMARK')
+                        op.commit_hash = commit.hash
+                        
                         # Open project state и Compare в одной строке
                         layout.separator()
                         row = layout.row(align=True)

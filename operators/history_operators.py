@@ -26,7 +26,7 @@ class DF_OT_select_commit(Operator):
     """Select a commit in the history list."""
     bl_idname = "df.select_commit"
     bl_label = "Select Commit"
-    bl_description = "Select a commit"
+    bl_description = "Select a commit and load it to temporary folder"
     bl_options = {'REGISTER'}
 
     commit_index: IntProperty(name="Commit Index")
@@ -36,17 +36,100 @@ class DF_OT_select_commit(Operator):
         commits = context.scene.df_commits
         
         if 0 <= self.commit_index < len(commits):
+            commit = commits[self.commit_index]
+            
             # Toggle selection
-            commits[self.commit_index].is_selected = not commits[self.commit_index].is_selected
+            commit.is_selected = not commit.is_selected
             
             # Deselect others
-            for i, commit in enumerate(commits):
+            for i, c in enumerate(commits):
                 if i != self.commit_index:
-                    commit.is_selected = False
+                    c.is_selected = False
             
-            context.scene.df_commit_props.selected_commit_index = self.commit_index if commits[self.commit_index].is_selected else -1
+            context.scene.df_commit_props.selected_commit_index = self.commit_index if commit.is_selected else -1
+            
+            # Load commit to temporary folder (like Compare does) for project commits
+            # Load when selected OR when index changes (for UIList selection)
+            if commit.commit_type == "project":
+                try:
+                    repo_path, error = get_repository_path(self)
+                    if repo_path:
+                        # Load commit to temporary folder
+                        self._load_commit_to_temp(repo_path, commit.hash, context)
+                except Exception as e:
+                    logger.warning(f"Failed to load commit to temp folder: {e}", exc_info=True)
+            elif not commit.is_selected and commit.commit_type != "project":
+                # Clean up temp folder when deselecting non-project commits
+                self._cleanup_preview_temp(context)
         
         return {'FINISHED'}
+    
+    def _load_commit_to_temp(self, repo_path: Path, commit_hash: str, context):
+        """Load commit to temporary folder (similar to compare_project)."""
+        import shutil
+        from ..forester.core.database import ForesterDB
+        from ..forester.core.storage import ObjectStorage
+        from ..forester.models.commit import Commit
+        from ..forester.commands.checkout import restore_files_from_tree, restore_meshes_from_commit
+        
+        dfm_dir = repo_path / ".DFM"
+        temp_dir = dfm_dir / "preview_temp"
+        temp_dir.mkdir(exist_ok=True)
+        
+        # Clean up previous preview if exists
+        prev_temp_dir = getattr(context.scene, 'df_preview_temp_dir', '')
+        if prev_temp_dir:
+            prev_path = Path(prev_temp_dir)
+            if prev_path.exists() and prev_path != dfm_dir:
+                try:
+                    shutil.rmtree(prev_path)
+                except Exception:
+                    pass
+        
+        # Create unique temp directory for this commit
+        temp_working_dir = temp_dir / f"commit_{commit_hash[:16]}"
+        
+        # Clean up if exists
+        if temp_working_dir.exists():
+            shutil.rmtree(temp_working_dir)
+        temp_working_dir.mkdir(parents=True)
+        
+        db_path = dfm_dir / "forester.db"
+        with ForesterDB(db_path) as db:
+            storage = ObjectStorage(dfm_dir)
+            commit = Commit.from_storage(commit_hash, db, storage)
+            
+            if not commit:
+                return
+            
+            # Get tree from commit
+            tree = commit.get_tree(db, storage)
+            if not tree:
+                return
+            
+            # Restore files from tree
+            restore_files_from_tree(tree, temp_working_dir, storage, db)
+            
+            # Restore meshes from commit
+            restore_meshes_from_commit(commit, temp_working_dir, storage, dfm_dir)
+            
+            # Store temp directory path in scene
+            context.scene.df_preview_temp_dir = str(temp_working_dir)
+            context.scene.df_preview_commit_hash = commit_hash
+    
+    def _cleanup_preview_temp(self, context):
+        """Clean up preview temporary directory."""
+        import shutil
+        prev_temp_dir = getattr(context.scene, 'df_preview_temp_dir', '')
+        if prev_temp_dir:
+            prev_path = Path(prev_temp_dir)
+            if prev_path.exists():
+                try:
+                    shutil.rmtree(prev_path)
+                except Exception:
+                    pass
+            context.scene.df_preview_temp_dir = ""
+            context.scene.df_preview_commit_hash = ""
 
 
 class DF_OT_checkout_commit(Operator):
