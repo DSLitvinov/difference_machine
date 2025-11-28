@@ -269,6 +269,7 @@ class DF_PT_branch_panel(Panel):
                         info_row.label(text="Cannot delete the last branch", icon='INFO')
                     elif selected_branch.is_current:
                         info_row.label(text="Cannot delete current branch", icon='INFO')
+        
         else:
             # Показываем информационное сообщение для объекта сравнения
             layout.separator()

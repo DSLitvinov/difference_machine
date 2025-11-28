@@ -30,6 +30,12 @@ from .mesh_commit import (
 from .delete_commit import (
     delete_commit,
 )
+from .rebuild_database import (
+    rebuild_database,
+)
+from .garbage_collect import (
+    garbage_collect,
+)
 
 __all__ = [
     "init_repository",
@@ -52,5 +58,7 @@ __all__ = [
     "create_mesh_only_commit",
     "auto_compress_mesh_commits",
     "delete_commit",
+    "rebuild_database",
+    "garbage_collect",
 ]
 
