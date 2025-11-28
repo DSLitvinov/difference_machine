@@ -240,14 +240,79 @@ def create_mesh_only_commit(
                 mesh_info = db.get_mesh(mesh_hash)
                 storage_path = Path(mesh_info['path'])
                 
-                # Load existing material.json
+                # Check if textures need to be copied (they might have changed)
+                # Load existing material.json first to check existing textures
                 material_json_path = storage_path / "material.json"
+                existing_material_json = None
                 if material_json_path.exists():
                     with open(material_json_path, 'r', encoding='utf-8') as f:
                         existing_material_json = json.load(f)
+                
+                # Check and copy changed textures
+                if material_json and 'textures' in material_json and existing_material_json:
+                    # Build map of existing textures by image_name
+                    existing_textures_map = {}
+                    if 'textures' in existing_material_json:
+                        for tex in existing_material_json['textures']:
+                            img_name = tex.get('image_name', '')
+                            if img_name:
+                                existing_textures_map[img_name] = tex
                     
-                    # Update node_data for TEX_IMAGE nodes if textures are present
-                    if 'textures' in material_json and 'node_tree' in existing_material_json and 'nodes' in existing_material_json['node_tree']:
+                    textures_dir = storage_path / "textures"
+                    textures_dir.mkdir(exist_ok=True)
+                    
+                    import shutil
+                    import os
+                    
+                    for texture_info in material_json['textures']:
+                        image_name = texture_info.get('image_name', '')
+                        current_hash = texture_info.get('file_hash')
+                        
+                        # Check if texture changed compared to existing version
+                        needs_copy_for_existing = False
+                        if image_name in existing_textures_map:
+                            existing_tex = existing_textures_map[image_name]
+                            existing_hash = existing_tex.get('file_hash')
+                            if existing_hash and current_hash and existing_hash != current_hash:
+                                # Texture changed - needs copy
+                                needs_copy_for_existing = True
+                        else:
+                            # New texture - needs copy
+                            needs_copy_for_existing = True
+                        
+                        if needs_copy_for_existing and current_hash:
+                            # Copy texture file
+                            original_path = texture_info.get('original_path')
+                            if original_path:
+                                try:
+                                    if os.path.isabs(original_path):
+                                        abs_path = Path(original_path).resolve()
+                                    else:
+                                        abs_path = (working_dir / original_path).resolve()
+                                    if not abs_path.exists():
+                                        logger.warning(f"Texture path does not exist: {abs_path}")
+                                        continue
+                                except (OSError, ValueError) as e:
+                                    logger.warning(f"Invalid texture path '{original_path}': {e}")
+                                    continue
+                                
+                                if abs_path.exists() and abs_path.is_file():
+                                    texture_filename = abs_path.name
+                                    dest_path = textures_dir / texture_filename
+                                    shutil.copy2(abs_path, dest_path)
+                                    texture_info['commit_path'] = f"textures/{texture_filename}"
+                                    texture_info['copied'] = True
+                                    logger.debug(f"Copied changed texture: {texture_filename} to {dest_path}")
+                        elif image_name in existing_textures_map:
+                            # Texture unchanged - use existing commit_path
+                            existing_tex = existing_textures_map[image_name]
+                            texture_info['copied'] = False
+                            texture_info['commit_path'] = existing_tex.get('commit_path')
+                            if existing_tex.get('original_path'):
+                                texture_info['original_path'] = existing_tex['original_path']
+                
+                # Update node_data for TEX_IMAGE nodes if textures are present
+                if existing_material_json and 'textures' in material_json and 'node_tree' in existing_material_json and 'nodes' in existing_material_json['node_tree']:
                         # Build texture lookup by node_name
                         texture_by_node = {}
                         for tex_info in material_json['textures']:
