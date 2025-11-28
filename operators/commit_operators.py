@@ -64,6 +64,10 @@ class DF_OT_create_project_commit(Operator):
             
             if commit_hash:
                 self.report({'INFO'}, f"Commit created: {commit_hash[:16]}...")
+                # Refresh branches list (commit count may have changed)
+                bpy.ops.df.refresh_branches(update_index=False)
+                # Refresh commit history
+                bpy.ops.df.refresh_history()
                 return {'FINISHED'}
             else:
                 self.report({'INFO'}, "No changes to commit")
@@ -189,6 +193,11 @@ class DF_OT_create_mesh_commit(Operator):
                     )
                     if deleted > 0:
                         self.report({'INFO'}, f"Compressed {deleted} old commits")
+                
+                # Refresh branches list (commit count may have changed)
+                bpy.ops.df.refresh_branches(update_index=False)
+                # Refresh commit history
+                bpy.ops.df.refresh_history()
                 
                 return {'FINISHED'}
             else:
@@ -404,6 +413,8 @@ class DF_OT_create_branch(Operator):
             self.report({'INFO'}, f"Branch '{self.branch_name}' created")
             # Refresh branches list to update indices
             bpy.ops.df.refresh_branches(update_index=True)
+            # Refresh commit history to update UI
+            bpy.ops.df.refresh_history()
             return {'FINISHED'}
         except ValueError as e:
             self.report({'ERROR'}, str(e))
@@ -600,6 +611,8 @@ class DF_OT_delete_branch(Operator):
             self.report({'INFO'}, f"Branch '{self.branch_name}' deleted")
             # Refresh branches list to update indices
             bpy.ops.df.refresh_branches(update_index=True)
+            # Refresh commit history to update UI (commits may have been deleted)
+            bpy.ops.df.refresh_history()
             return {'FINISHED'}
         except ValueError as e:
             self.report({'ERROR'}, str(e))

@@ -123,7 +123,7 @@ def list_branches(repo_path: Path) -> List[Dict[str, Any]]:
 
 def delete_branch(repo_path: Path, branch_name: str, force: bool = False) -> bool:
     """
-    Delete a branch.
+    Delete a branch and all commits that are not used by other branches.
     
     Args:
         repo_path: Path to repository root

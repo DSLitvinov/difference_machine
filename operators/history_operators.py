@@ -75,6 +75,8 @@ class DF_OT_checkout_commit(Operator):
             
             if success:
                 self.report({'INFO'}, f"Checked out commit: {self.commit_hash[:16]}...")
+                # Refresh branches list (HEAD may have changed)
+                bpy.ops.df.refresh_branches(update_index=False)
                 # Refresh history
                 bpy.ops.df.refresh_history()
                 return {'FINISHED'}
@@ -382,6 +384,8 @@ class DF_OT_delete_commit(Operator):
             
             if success:
                 self.report({'INFO'}, f"Deleted commit: {self.commit_hash[:16]}...")
+                # Refresh branches list (commit count may have changed)
+                bpy.ops.df.refresh_branches(update_index=False)
                 # Refresh history
                 bpy.ops.df.refresh_history()
                 return {'FINISHED'}
