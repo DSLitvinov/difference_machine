@@ -260,6 +260,219 @@ def cmd_rebuild(args):
         return 1
 
 
+def _compare_trees(parent_tree, current_tree):
+    """
+    Compare two trees and return changed files.
+    
+    Args:
+        parent_tree: Tree from parent commit
+        current_tree: Tree from current commit
+        
+    Returns:
+        Dict with 'added', 'modified', 'deleted' lists of TreeEntry objects
+    """
+    from .models.tree import TreeEntry
+    
+    # Build dictionaries by path for easy lookup
+    parent_entries = {entry.path: entry for entry in parent_tree.entries}
+    current_entries = {entry.path: entry for entry in current_tree.entries}
+    
+    added = []
+    modified = []
+    deleted = []
+    
+    # Find added and modified files
+    for path, entry in current_entries.items():
+        if path not in parent_entries:
+            # File was added
+            added.append(entry)
+        elif entry.hash != parent_entries[path].hash:
+            # File was modified (hash changed)
+            modified.append(entry)
+    
+    # Find deleted files
+    for path, entry in parent_entries.items():
+        if path not in current_entries:
+            deleted.append(entry)
+    
+    return {
+        'added': added,
+        'modified': modified,
+        'deleted': deleted
+    }
+
+
+def cmd_show(args):
+    """Handle show command - display commit details and files."""
+    repo_path = find_repository(Path.cwd())
+    if not repo_path:
+        print("Error: Not a Forester repository")
+        return 1
+    
+    try:
+        from .core.database import ForesterDB
+        from .core.storage import ObjectStorage
+        from .models.commit import Commit
+        
+        dfm_dir = repo_path / ".DFM"
+        db_path = dfm_dir / "forester.db"
+        
+        with ForesterDB(db_path) as db:
+            storage = ObjectStorage(dfm_dir)
+            
+            # Load commit
+            commit = Commit.from_storage(args.commit_hash, db, storage)
+            if not commit:
+                print(f"Error: Commit {args.commit_hash} not found")
+                return 1
+            
+            # Print commit info
+            import datetime
+            date_str = datetime.datetime.fromtimestamp(commit.timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            
+            print(f"Commit: {commit.hash}")
+            print(f"Author: {commit.author}")
+            print(f"Date: {date_str}")
+            print(f"Message: {commit.message}")
+            print(f"Type: {commit.commit_type}")
+            if commit.parent_hash:
+                print(f"Parent: {commit.parent_hash[:16]}...")
+            
+            # Get tree and show files
+            if commit.commit_type == "project" and commit.tree_hash:
+                tree = commit.get_tree(db, storage)
+                if tree:
+                    if args.full:
+                        # Show all files
+                        print(f"\nFiles ({len(tree.entries)}):")
+                        for entry in sorted(tree.entries, key=lambda e: e.path):
+                            size_str = f" ({entry.size:,} bytes)" if entry.size else ""
+                            print(f"  {entry.path}{size_str}")
+                    else:
+                        # Show only changed files (compare with parent)
+                        if commit.parent_hash:
+                            parent_commit = Commit.from_storage(commit.parent_hash, db, storage)
+                            if parent_commit and parent_commit.tree_hash:
+                                parent_tree = parent_commit.get_tree(db, storage)
+                                if parent_tree:
+                                    # Compare trees
+                                    changed_files = _compare_trees(parent_tree, tree)
+                                    if changed_files['added'] or changed_files['modified'] or changed_files['deleted']:
+                                        total_changed = (len(changed_files['added']) + 
+                                                        len(changed_files['modified']) + 
+                                                        len(changed_files['deleted']))
+                                        print(f"\nChanged files ({total_changed}):")
+                                        
+                                        # Show deleted files
+                                        for entry in sorted(changed_files['deleted'], key=lambda e: e.path):
+                                            print(f"  - {entry.path} (deleted)")
+                                        
+                                        # Show modified files
+                                        for entry in sorted(changed_files['modified'], key=lambda e: e.path):
+                                            size_str = f" ({entry.size:,} bytes)" if entry.size else ""
+                                            print(f"  M {entry.path}{size_str}")
+                                        
+                                        # Show added files
+                                        for entry in sorted(changed_files['added'], key=lambda e: e.path):
+                                            size_str = f" ({entry.size:,} bytes)" if entry.size else ""
+                                            print(f"  + {entry.path}{size_str}")
+                                    else:
+                                        print("\nNo file changes (only metadata changed)")
+                                else:
+                                    # Parent tree not found, show all files
+                                    print(f"\nFiles ({len(tree.entries)}):")
+                                    for entry in sorted(tree.entries, key=lambda e: e.path):
+                                        size_str = f" ({entry.size:,} bytes)" if entry.size else ""
+                                        print(f"  {entry.path}{size_str}")
+                            else:
+                                # No parent commit or parent has no tree, show all files
+                                print(f"\nFiles ({len(tree.entries)}):")
+                                for entry in sorted(tree.entries, key=lambda e: e.path):
+                                    size_str = f" ({entry.size:,} bytes)" if entry.size else ""
+                                    print(f"  {entry.path}{size_str}")
+                        else:
+                            # No parent commit (first commit), show all files
+                            print(f"\nFiles ({len(tree.entries)}):")
+                            for entry in sorted(tree.entries, key=lambda e: e.path):
+                                size_str = f" ({entry.size:,} bytes)" if entry.size else ""
+                                print(f"  {entry.path}{size_str}")
+                else:
+                    print("\nTree not found")
+            
+            # Show meshes if mesh_only commit
+            if commit.commit_type == "mesh_only":
+                if commit.selected_mesh_names:
+                    print(f"\nMeshes ({len(commit.selected_mesh_names)}):")
+                    for mesh_name in commit.selected_mesh_names:
+                        print(f"  {mesh_name}")
+                if commit.mesh_hashes:
+                    print(f"\nMesh hashes ({len(commit.mesh_hashes)}):")
+                    for mesh_hash in commit.mesh_hashes:
+                        print(f"  {mesh_hash[:16]}...")
+            
+            return 0
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+def cmd_log(args):
+    """Handle log command - show commit history."""
+    repo_path = find_repository(Path.cwd())
+    if not repo_path:
+        print("Error: Not a Forester repository")
+        return 1
+    
+    try:
+        from .core.refs import get_current_branch
+        from .commands.branch import get_branch_commits
+        
+        branch_name = args.branch if args.branch else get_current_branch(repo_path)
+        if not branch_name:
+            print("Error: No branch specified and no current branch")
+            return 1
+        
+        commits = get_branch_commits(repo_path, branch_name)
+        if not commits:
+            print(f"No commits in branch '{branch_name}'")
+            return 0
+        
+        import datetime
+        for commit in reversed(commits):  # Show newest first
+            date_str = datetime.datetime.fromtimestamp(commit['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+            hash_short = commit['hash'][:16]
+            message = commit.get('message', 'No message')
+            author = commit.get('author', 'Unknown')
+            commit_type = commit.get('commit_type', 'project')
+            
+            type_icon = "📦" if commit_type == "mesh_only" else "📁"
+            print(f"{hash_short} {type_icon} {author} | {date_str}")
+            print(f"    {message}")
+            if args.verbose:
+                if commit.get('parent_hash'):
+                    print(f"    Parent: {commit['parent_hash'][:16]}...")
+                if commit_type == "mesh_only" and commit.get('selected_mesh_names'):
+                    mesh_names = commit['selected_mesh_names']
+                    if isinstance(mesh_names, str):
+                        import json
+                        try:
+                            mesh_names = json.loads(mesh_names)
+                        except:
+                            mesh_names = [mesh_names]
+                    if mesh_names:
+                        print(f"    Meshes: {', '.join(mesh_names)}")
+            print()
+        
+        return 0
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -325,6 +538,17 @@ def main():
     rebuild_parser.add_argument("--no-backup", action="store_true", 
                                help="Don't create backup of existing database")
     
+    # Show command
+    show_parser = subparsers.add_parser("show", help="Show commit details and files")
+    show_parser.add_argument("commit_hash", help="Commit hash to show")
+    show_parser.add_argument("--full", action="store_true", 
+                           help="Show all files in commit (default: show only changed files)")
+    
+    # Log command
+    log_parser = subparsers.add_parser("log", help="Show commit history")
+    log_parser.add_argument("branch", nargs="?", help="Branch name (default: current branch)")
+    log_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed information")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -346,6 +570,10 @@ def main():
         return cmd_status(args)
     elif args.command == "rebuild":
         return cmd_rebuild(args)
+    elif args.command == "show":
+        return cmd_show(args)
+    elif args.command == "log":
+        return cmd_log(args)
     else:
         parser.print_help()
         return 1

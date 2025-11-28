@@ -137,10 +137,7 @@ class IgnoreRules:
         return [
             # Forester directory
             '.DFM/',
-            
-            # Working meshes directory (not tracked)
-            'meshes/',
-            
+           
             # Blender backup files
             '*.blend1',
             '*.blend2',
