@@ -4,9 +4,12 @@ Manages SQLite database operations.
 """
 
 import sqlite3
-from pathlib import Path
-from typing import Optional, List, Dict, Any
 import json
+from pathlib import Path
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .storage import ObjectStorage
 
 
 class ForesterDB:
@@ -337,7 +340,7 @@ class ForesterDB:
         cursor.execute("SELECT 1 FROM trees WHERE hash = ?", (tree_hash,))
         return cursor.fetchone() is not None
     
-    def get_trees_using_hash(self, tree_hash: str) -> List[str]:
+    def get_commits_using_tree(self, tree_hash: str) -> List[str]:
         """Get all commits using this tree."""
         if self.conn is None:
             self.connect()
@@ -345,6 +348,10 @@ class ForesterDB:
         cursor = self.conn.cursor()
         cursor.execute("SELECT hash FROM commits WHERE tree_hash = ?", (tree_hash,))
         return [row['hash'] for row in cursor.fetchall()]
+    
+    def get_trees_using_hash(self, tree_hash: str) -> List[str]:
+        """Get all commits using this tree (deprecated, use get_commits_using_tree)."""
+        return self.get_commits_using_tree(tree_hash)
     
     def delete_tree(self, tree_hash: str) -> None:
         """Delete tree from database."""
@@ -392,7 +399,7 @@ class ForesterDB:
         return cursor.fetchone() is not None
     
     def get_blobs_in_tree(self, tree_hash: str) -> List[str]:
-        """Get all blob hashes in a tree."""
+        """Get all blob hashes in a tree (recursively)."""
         tree = self.get_tree(tree_hash)
         if not tree:
             return []
@@ -403,11 +410,16 @@ class ForesterDB:
                 blob_hashes.append(entry['hash'])
             elif entry.get('type') == 'tree':
                 # Recursively get blobs from subtrees
-                subtree = self.get_tree(entry['hash'])
-                if subtree:
-                    blob_hashes.extend(self.get_blobs_in_tree(entry['hash']))
+                blob_hashes.extend(self.get_blobs_in_tree(entry['hash']))
         
         return blob_hashes
+    
+    def get_all_blobs_in_tree(self, tree_hash: str) -> List[str]:
+        """
+        Get all blob hashes in a tree recursively.
+        Alias for get_blobs_in_tree for clarity.
+        """
+        return self.get_blobs_in_tree(tree_hash)
     
     def get_commits_using_blob(self, blob_hash: str) -> List[str]:
         """
@@ -482,6 +494,43 @@ class ForesterDB:
         cursor = self.conn.cursor()
         cursor.execute("SELECT 1 FROM meshes WHERE hash = ?", (mesh_hash,))
         return cursor.fetchone() is not None
+    
+    def get_commits_using_mesh(self, mesh_hash: str, storage: Optional['ObjectStorage'] = None) -> List[str]:
+        """
+        Get all commits using this mesh.
+        
+        Args:
+            mesh_hash: Hash of the mesh
+            storage: ObjectStorage instance (required to read commit files)
+            
+        Returns:
+            List of commit hashes using this mesh
+        """
+        if self.conn is None:
+            self.connect()
+        
+        if storage is None:
+            # Cannot check without storage, return empty list
+            return []
+        
+        cursor = self.conn.cursor()
+        # Get all commit hashes from database
+        cursor.execute("SELECT hash FROM commits")
+        all_commits = [row['hash'] for row in cursor.fetchall()]
+        
+        using_commits = []
+        for commit_hash in all_commits:
+            try:
+                # Load commit data from storage
+                commit_data = storage.load_commit(commit_hash)
+                mesh_hashes = commit_data.get('mesh_hashes', [])
+                if mesh_hash in mesh_hashes:
+                    using_commits.append(commit_hash)
+            except (FileNotFoundError, KeyError, json.JSONDecodeError):
+                # Commit file doesn't exist or is corrupted, skip
+                continue
+        
+        return using_commits
     
     def delete_mesh(self, mesh_hash: str) -> None:
         """Delete mesh from database."""
