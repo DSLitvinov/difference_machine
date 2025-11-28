@@ -183,8 +183,8 @@ class DF_OT_create_mesh_commit(Operator):
             if commit_hash:
                 self.report({'INFO'}, f"Mesh commit created: {commit_hash[:16]}...")
                 
-                # Auto-compress if enabled
-                if props.auto_compress:
+                # Auto-compress if enabled (use preference setting)
+                if prefs.auto_compress:
                     mesh_names = [data['mesh_name'] for data in mesh_data_list]
                     deleted = auto_compress_mesh_commits(
                         repo_path=repo_path,

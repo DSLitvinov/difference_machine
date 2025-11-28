@@ -1,6 +1,6 @@
 import bpy
 from bpy.types import AddonPreferences
-from bpy.props import StringProperty, IntProperty
+from bpy.props import StringProperty, IntProperty, BoolProperty
 from pathlib import Path
 
 
@@ -11,6 +11,12 @@ class DifferenceMachinePreferences(AddonPreferences):
         name="Default Author",
         description="Default author name for commits",
         default="Unknown",
+    )
+
+    auto_compress: BoolProperty(
+        name="Auto-compress Mesh-only Commits",
+        description="Automatically delete old mesh-only commits when creating new ones",
+        default=False,
     )
 
     auto_compress_keep_last_n: IntProperty(
@@ -31,6 +37,7 @@ class DifferenceMachinePreferences(AddonPreferences):
 
         box = layout.box()
         box.label(text="Auto-compress Settings", icon='PACKAGE')
+        box.prop(self, "auto_compress", text="Auto-compress Mesh-only Commits")
         box.prop(self, "auto_compress_keep_last_n")
         
         # Database maintenance
