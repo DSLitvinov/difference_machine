@@ -217,8 +217,15 @@ def switch_branch(repo_path: Path, branch_name: str) -> bool:
     # Get branch commit hash
     branch_commit = get_branch_ref(repo_path, branch_name)
     
+    # ВАЖНО: Используем отдельное соединение для записи и закрываем его
+    # чтобы гарантировать, что следующее чтение получит актуальные данные
     with ForesterDB(db_path) as db:
         db.set_branch_and_head(branch_name, branch_commit)
+        # Принудительно синхронизируем изменения с диском
+        try:
+            db.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass  # Игнорируем ошибки checkpoint
     
     return True
 

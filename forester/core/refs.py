@@ -54,6 +54,9 @@ def get_current_branch(repo_path: Path) -> Optional[str]:
     """
     Get current branch name from database.
     
+    ВАЖНО: Всегда открывает новое соединение для гарантии чтения актуальных данных.
+    Это предотвращает проблемы с кешированием и транзакциями.
+    
     Args:
         repo_path: Path to repository root
         
@@ -71,9 +74,16 @@ def get_current_branch(repo_path: Path) -> Optional[str]:
     from .database import ForesterDB
     
     try:
+        # ВАЖНО: Используем новое соединение каждый раз для гарантии актуальных данных
+        # Context manager гарантирует закрытие соединения после использования
         with ForesterDB(db_path) as db:
-            return db.get_current_branch()
-    except Exception:
+            # Принудительно читаем из БД без кеширования
+            branch = db.get_current_branch()
+            return branch
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting current branch: {e}", exc_info=True)
         return None
 
 

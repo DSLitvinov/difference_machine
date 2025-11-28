@@ -29,6 +29,13 @@ class ForesterDB:
         if self.conn is None:
             self.conn = sqlite3.connect(self.db_path)
             self.conn.row_factory = sqlite3.Row  # Enable dict-like access
+            # ВАЖНО: Настраиваем режим WAL для лучшей поддержки конкурентного доступа
+            # и гарантии чтения актуальных данных
+            try:
+                self.conn.execute("PRAGMA journal_mode = WAL")
+                self.conn.execute("PRAGMA synchronous = NORMAL")
+            except Exception:
+                pass  # Игнорируем ошибки, если WAL не поддерживается
     
     def close(self) -> None:
         """Close database connection."""
@@ -598,5 +605,12 @@ class ForesterDB:
             VALUES (1, ?, ?)
         """, (branch_name, commit_hash))
         self.conn.commit()
+        
+        # ВАЖНО: Принудительно синхронизируем изменения с диском
+        # Это гарантирует, что следующее чтение получит актуальные данные
+        try:
+            self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass  # Игнорируем ошибки checkpoint
 
 

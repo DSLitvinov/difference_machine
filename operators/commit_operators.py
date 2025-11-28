@@ -421,54 +421,35 @@ class DF_OT_switch_branch(Operator):
     bl_options = {'REGISTER'}
 
     branch_name: StringProperty(name="Branch Name", default="")
-    branch_index: bpy.props.IntProperty(name="Branch Index", default=-1)  # Index from UI element
 
     def invoke(self, context, event):
         """Invoke the operator - use selected branch if no name provided."""
-        # If branch_name not provided, use selected branch from list
+        # Если branch_name не указан, используем выбранную ветку из списка
         if not self.branch_name:
             branches = context.scene.df_branches
             if not branches or len(branches) == 0:
                 self.report({'ERROR'}, "No branches available. Please refresh the list.")
                 return {'CANCELLED'}
             
-            if (hasattr(context.scene, 'df_branch_list_index') and
-                context.scene.df_branch_list_index >= 0 and 
-                context.scene.df_branch_list_index < len(branches)):
-                selected_index = context.scene.df_branch_list_index
-                selected_branch = branches[selected_index]
-                
-                # Get branch name from selected item
-                self.branch_name = selected_branch.name
-                self.branch_index = selected_branch.branch_index  # Get index from UI element
-                
-                # Debug: verify we got the right branch
-                if not self.branch_name:
-                    self.report({'ERROR'}, f"Selected branch has no name at index {selected_index}. Available branches: {[b.name for b in branches]}")
-                    return {'CANCELLED'}
-                
-                # Additional verification: log what we're about to switch to
-                # This helps debug if the wrong branch is selected
-                
-                # Double-check against database to ensure is_current is accurate
-                # This prevents switching to the same branch
-                blend_file = Path(bpy.data.filepath)
-                if blend_file:
-                    repo_path = find_repository(blend_file.parent)
-                    if repo_path:
-                        current_branch = get_current_branch(repo_path)
-                        if current_branch and current_branch == self.branch_name:
-                            self.report({'INFO'}, f"Already on branch '{self.branch_name}'")
-                            return {'CANCELLED'}
-            else:
-                self.report({'ERROR'}, f"No branch selected. Index: {getattr(context.scene, 'df_branch_list_index', 'N/A')}, Branches: {len(branches)}")
+            selected_index = getattr(context.scene, 'df_branch_list_index', -1)
+            if selected_index < 0 or selected_index >= len(branches):
+                self.report({'ERROR'}, f"No branch selected. Index: {selected_index}, Branches: {len(branches)}")
                 return {'CANCELLED'}
+            
+            selected_branch = branches[selected_index]
+            self.branch_name = selected_branch.name
+            
+            if not self.branch_name:
+                self.report({'ERROR'}, f"Selected branch has no name at index {selected_index}")
+                return {'CANCELLED'}
+            
+            # ВАЖНО: Логируем для отладки
+            logger.debug(f"Invoke: selected branch name from UI: '{self.branch_name}'")
         
         return self.execute(context)
 
     def execute(self, context):
         """Execute the operator."""
-        # Find repository
         blend_file = Path(bpy.data.filepath)
         if not blend_file:
             self.report({'ERROR'}, "Please save the Blender file first")
@@ -479,40 +460,103 @@ class DF_OT_switch_branch(Operator):
             self.report({'ERROR'}, "Not a Forester repository")
             return {'CANCELLED'}
         
-        if not self.branch_name:
+        # ВАЖНО: Сохраняем имя ветки в локальную переменную перед проверками
+        # чтобы избежать проблем с сохранением состояния между вызовами
+        target_branch_name = self.branch_name
+        
+        if not target_branch_name:
             self.report({'ERROR'}, "Branch name not specified")
             return {'CANCELLED'}
         
         try:
-            # Verify branch name before switching
-            if not self.branch_name:
-                self.report({'ERROR'}, "Branch name is empty")
+            # ВАЖНО: Получаем текущую ветку непосредственно из репозитория
+            # Не полагаемся на кешированные значения
+            # Используем новое соединение с БД для гарантии актуальных данных
+            current_branch = get_current_branch(repo_path)
+            
+            # Отладочная информация
+            logger.debug(f"Execute: current_branch='{current_branch}', switching to='{target_branch_name}'")
+            
+            # Проверяем, не пытаемся ли переключиться на ту же ветку
+            # ВАЖНО: Сравниваем строки, учитывая что current_branch может быть None
+            if current_branch and current_branch == target_branch_name:
+                logger.debug(f"Already on branch '{target_branch_name}', skipping switch")
+                self.report({'INFO'}, f"Already on branch '{target_branch_name}'")
+                # Но все равно обновляем UI на случай изменений
+                self._update_ui(context, repo_path)
+                # ВАЖНО: Сбрасываем branch_name после использования
+                self.branch_name = ""
                 return {'CANCELLED'}
             
-            # Switch branch in database
-            switch_branch(repo_path, self.branch_name)
+            # Переключаем ветку
+            logger.debug(f"Calling switch_branch('{target_branch_name}')")
+            switch_branch(repo_path, target_branch_name)
             
-            # Update props
-            context.scene.df_commit_props.branch = self.branch_name
+            # ВАЖНО: Сразу после переключения получаем текущую ветку из БД
+            # Используем новое соединение для гарантии чтения актуальных данных
+            # Не используем задержки - полагаемся на правильную работу транзакций БД
+            new_current_branch = get_current_branch(repo_path)
+            logger.debug(f"After switch - current branch: '{new_current_branch}', expected: '{target_branch_name}'")
             
-            self.report({'INFO'}, f"Switched to branch '{self.branch_name}'")
+            # Проверяем, что переключение прошло успешно
+            if new_current_branch != target_branch_name:
+                # Если не совпадает, пробуем еще раз (может быть проблема с транзакцией)
+                # Закрываем все соединения и открываем новое
+                import gc
+                gc.collect()  # Принудительная сборка мусора для закрытия соединений
+                
+                new_current_branch = get_current_branch(repo_path)
+                logger.debug(f"After gc.collect() - current branch: '{new_current_branch}'")
+                
+                if new_current_branch != target_branch_name:
+                    self.report({'ERROR'}, 
+                        f"Failed to switch branch. Current branch is '{new_current_branch}' instead of '{target_branch_name}'")
+                    logger.error(f"Branch switch failed: expected '{target_branch_name}', got '{new_current_branch}'")
+                    # Сбрасываем branch_name
+                    self.branch_name = ""
+                    return {'CANCELLED'}
             
-            # Refresh branches list using the operator to ensure consistency
-            # This will read current_branch from database and update UI properly
-            bpy.ops.df.refresh_branches(update_index=True)
+            self.report({'INFO'}, f"Switched to branch '{target_branch_name}'")
             
-            # Refresh history for the new branch
-            bpy.ops.df.refresh_history()
+            # Обновляем UI
+            self._update_ui(context, repo_path)
+            
+            # ВАЖНО: Сбрасываем branch_name после успешного переключения
+            # чтобы следующее переключение не использовало старое значение
+            self.branch_name = ""
             
             return {'FINISHED'}
+            
         except ValueError as e:
             self.report({'ERROR'}, str(e))
+            logger.error(f"ValueError during branch switch: {e}", exc_info=True)
             return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to switch branch: {str(e)}")
+            logger.error(f"Unexpected error during branch switch: {e}", exc_info=True)
             return {'CANCELLED'}
 
+    def _update_ui(self, context, repo_path):
+        """Update UI after branch switch."""
+        # ВАЖНО: Получаем актуальную текущую ветку из БД
+        current_branch = get_current_branch(repo_path)
+        
+        # Обновляем свойство ветки в сцене актуальным значением
+        if current_branch:
+            context.scene.df_commit_props.branch = current_branch
+        
+        # Принудительно обновляем список веток
+        # ВАЖНО: update_index=True обновит индекс на текущую ветку
+        bpy.ops.df.refresh_branches(update_index=True)
+        
+        # Обновляем историю для новой ветки
+        bpy.ops.df.refresh_history()
+        
+        # Обновляем все области экрана, а не только текущую
+        for area in context.screen.areas:
+            area.tag_redraw()
 
+        
 class DF_OT_delete_branch(Operator):
     """Delete a branch."""
     bl_idname = "df.delete_branch"
