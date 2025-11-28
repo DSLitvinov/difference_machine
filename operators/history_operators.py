@@ -661,10 +661,12 @@ class DF_OT_compare_mesh(Operator):
                 return {'CANCELLED'}
             
             # Import to Blender (new object for comparison)
+            # Create material with "_compare_" prefix to avoid conflicts
             comparison_obj = import_mesh_to_blender(
                 context, mesh_json, material_json, 
                 f"{mesh_name}_compare", mode='NEW',
-                mesh_storage_path=mesh_storage_path
+                mesh_storage_path=mesh_storage_path,
+                material_prefix="_compare_"
             )
             
             # Offset comparison object based on selected axis
@@ -775,10 +777,12 @@ class DF_OT_switch_comparison_axis(Operator):
             bpy.data.objects.remove(comparison_obj, do_unlink=True)
             
             # Import to Blender (new object for comparison)
+            # Create material with "_compare_" prefix to avoid conflicts
             comparison_obj = import_mesh_to_blender(
                 context, mesh_json, material_json, 
                 f"{mesh_name}_compare", mode='NEW',
-                mesh_storage_path=mesh_storage_path
+                mesh_storage_path=mesh_storage_path,
+                material_prefix="_compare_"
             )
             
             # Offset comparison object based on selected axis
