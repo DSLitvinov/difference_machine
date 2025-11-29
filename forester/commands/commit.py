@@ -239,5 +239,93 @@ def has_uncommitted_changes(repo_path: Path) -> bool:
         return current_tree.hash != tree.hash
 
 
+def get_commit_screenshot(repo_path: Path, commit_hash: str) -> Optional[bytes]:
+    """
+    Get screenshot image data for a commit.
+    
+    Args:
+        repo_path: Path to repository root
+        commit_hash: Hash of the commit
+        
+    Returns:
+        PNG image data as bytes, or None if screenshot not found
+    """
+    from ..core.database import ForesterDB
+    from ..core.storage import ObjectStorage
+    from ..models.commit import Commit
+    from ..models.blob import Blob
+    
+    dfm_dir = repo_path / ".DFM"
+    if not dfm_dir.exists():
+        return None
+    
+    db_path = dfm_dir / "forester.db"
+    if not db_path.exists():
+        return None
+    
+    try:
+        with ForesterDB(db_path) as db:
+            storage = ObjectStorage(dfm_dir)
+            commit = Commit.from_storage(commit_hash, db, storage)
+            
+            if not commit or not commit.screenshot_hash:
+                return None
+            
+            blob = Blob.from_storage(commit.screenshot_hash, db, storage)
+            if not blob:
+                return None
+            
+            # Load blob data
+            screenshot_data = blob.load_data(storage)
+            return screenshot_data
+    
+    except Exception:
+        return None
+
+
+def get_commit_screenshot(repo_path: Path, commit_hash: str) -> Optional[bytes]:
+    """
+    Get screenshot image data for a commit.
+    
+    Args:
+        repo_path: Path to repository root
+        commit_hash: Hash of the commit
+        
+    Returns:
+        PNG image data as bytes, or None if screenshot not found
+    """
+    from ..core.database import ForesterDB
+    from ..core.storage import ObjectStorage
+    from ..models.commit import Commit
+    from ..models.blob import Blob
+    
+    dfm_dir = repo_path / ".DFM"
+    if not dfm_dir.exists():
+        return None
+    
+    db_path = dfm_dir / "forester.db"
+    if not db_path.exists():
+        return None
+    
+    try:
+        with ForesterDB(db_path) as db:
+            storage = ObjectStorage(dfm_dir)
+            commit = Commit.from_storage(commit_hash, db, storage)
+            
+            if not commit or not commit.screenshot_hash:
+                return None
+            
+            blob = Blob.from_storage(commit.screenshot_hash, db, storage)
+            if not blob:
+                return None
+            
+            # Load blob data
+            screenshot_data = blob.load_data(storage)
+            return screenshot_data
+    
+    except Exception:
+        return None
+
+
 
 

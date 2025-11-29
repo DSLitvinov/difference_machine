@@ -25,7 +25,8 @@ def create_mesh_only_commit(
     mesh_data_list: List[Dict[str, Any]],  # List of {mesh_name, mesh_json, material_json}
     export_options: Dict[str, bool],
     message: str,
-    author: str = "Unknown"
+    author: str = "Unknown",
+    screenshot_hash: Optional[str] = None
 ) -> Optional[str]:
     """
     Create a mesh-only commit from selected meshes.
@@ -401,7 +402,8 @@ def create_mesh_only_commit(
             mesh_hashes=mesh_hashes,
             commit_type="mesh_only",
             selected_mesh_names=selected_mesh_names,
-            export_options=export_options
+            export_options=export_options,
+            screenshot_hash=screenshot_hash
         )
         
         # Save commit

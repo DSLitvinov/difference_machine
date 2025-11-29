@@ -54,12 +54,50 @@ class DF_OT_create_project_commit(Operator):
         prefs = get_addon_preferences(context)
         author = prefs.default_author if prefs.default_author else "Unknown"
         
+        # Capture viewport screenshot (always required)
+        screenshot_hash = None
+        try:
+            from ..utils.viewport_capture import capture_viewport_screenshot
+            from ..forester.models.blob import Blob
+            from ..forester.core.database import ForesterDB
+            from ..forester.core.storage import ObjectStorage
+            from ..forester.core.hashing import compute_hash
+            
+            logger.info("Capturing viewport screenshot...")
+            screenshot_data = capture_viewport_screenshot(context)
+            if screenshot_data:
+                logger.info(f"Screenshot captured: {len(screenshot_data)} bytes")
+                # Compute hash
+                blob_hash = compute_hash(screenshot_data)
+                
+                # Save as blob
+                dfm_dir = repo_path / ".DFM"
+                db_path = dfm_dir / "forester.db"
+                with ForesterDB(db_path) as db:
+                    storage = ObjectStorage(dfm_dir)
+                    blob = Blob.from_file_data(
+                        data=screenshot_data,
+                        blob_hash=blob_hash,
+                        base_dir=dfm_dir,
+                        db=db,
+                        storage=storage
+                    )
+                    screenshot_hash = blob.hash
+                    logger.info(f"Viewport screenshot saved: {screenshot_hash[:16]}...")
+            else:
+                logger.warning("Failed to capture viewport screenshot")
+                self.report({'WARNING'}, "Failed to capture viewport screenshot, but continuing with commit")
+        except Exception as e:
+            logger.error(f"Failed to capture viewport screenshot: {e}", exc_info=True)
+            self.report({'WARNING'}, f"Screenshot capture failed: {str(e)}, but continuing with commit")
+        
         # Create commit
         try:
             commit_hash = create_commit(
                 repo_path=repo_path,
                 message=props.message or "No message",
-                author=author
+                author=author,
+                screenshot_hash=screenshot_hash
             )
             
             if commit_hash:
@@ -175,6 +213,43 @@ class DF_OT_create_mesh_commit(Operator):
             self.report({'ERROR'}, "No meshes could be exported")
             return {'CANCELLED'}
         
+        # Capture viewport screenshot (always required)
+        screenshot_hash = None
+        try:
+            from ..utils.viewport_capture import capture_viewport_screenshot
+            from ..forester.models.blob import Blob
+            from ..forester.core.database import ForesterDB
+            from ..forester.core.storage import ObjectStorage
+            from ..forester.core.hashing import compute_hash
+            
+            logger.info("Capturing viewport screenshot for mesh commit...")
+            screenshot_data = capture_viewport_screenshot(context)
+            if screenshot_data:
+                logger.info(f"Screenshot captured: {len(screenshot_data)} bytes")
+                # Compute hash
+                blob_hash = compute_hash(screenshot_data)
+                
+                # Save as blob
+                dfm_dir = repo_path / ".DFM"
+                db_path = dfm_dir / "forester.db"
+                with ForesterDB(db_path) as db:
+                    storage = ObjectStorage(dfm_dir)
+                    blob = Blob.from_file_data(
+                        data=screenshot_data,
+                        blob_hash=blob_hash,
+                        base_dir=dfm_dir,
+                        db=db,
+                        storage=storage
+                    )
+                    screenshot_hash = blob.hash
+                    logger.info(f"Viewport screenshot saved: {screenshot_hash[:16]}...")
+            else:
+                logger.warning("Failed to capture viewport screenshot")
+                self.report({'WARNING'}, "Failed to capture viewport screenshot, but continuing with commit")
+        except Exception as e:
+            logger.error(f"Failed to capture viewport screenshot: {e}", exc_info=True)
+            self.report({'WARNING'}, f"Screenshot capture failed: {str(e)}, but continuing with commit")
+        
         # Create mesh-only commit
         try:
             commit_hash = create_mesh_only_commit(
@@ -182,7 +257,8 @@ class DF_OT_create_mesh_commit(Operator):
                 mesh_data_list=mesh_data_list,
                 export_options=export_options,
                 message=props.message or "No message",
-                author=default_author
+                author=default_author,
+                screenshot_hash=screenshot_hash
             )
             
             if commit_hash:
@@ -270,6 +346,10 @@ class DF_OT_refresh_history(Operator):
                         selected_names = []
                 if selected_names:
                     commit_item.selected_mesh_names = ", ".join(selected_names)
+                
+                # Add screenshot_hash
+                screenshot_hash_val = commit_data.get('screenshot_hash')
+                commit_item.screenshot_hash = screenshot_hash_val if screenshot_hash_val else ''
             
             self.report({'INFO'}, f"Loaded {len(commits_data)} commits from branch '{branch_name}'")
             return {'FINISHED'}

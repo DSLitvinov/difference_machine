@@ -78,7 +78,8 @@ class ForesterDB:
                 commit_type TEXT DEFAULT 'project',
                 selected_mesh_names TEXT,
                 export_options TEXT,
-                tag TEXT
+                tag TEXT,
+                screenshot_hash TEXT
             )
         """)
         
@@ -102,6 +103,14 @@ class ForesterDB:
             cursor.execute("ALTER TABLE commits ADD COLUMN tag TEXT")
         except sqlite3.OperationalError:
             pass  # Column already exists
+        
+        try:
+            cursor.execute("ALTER TABLE commits ADD COLUMN screenshot_hash TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        # Ensure screenshot_hash column exists (in case schema was created before this column was added)
+        self._ensure_screenshot_hash_column()
         
         # Trees table
         cursor.execute("""
@@ -193,10 +202,14 @@ class ForesterDB:
     def add_commit(self, commit_hash: str, branch: str, parent_hash: Optional[str],
                    timestamp: int, message: str, tree_hash: str, author: str,
                    commit_type: str = "project", selected_mesh_names: Optional[List[str]] = None,
-                   export_options: Optional[Dict[str, Any]] = None) -> None:
+                   export_options: Optional[Dict[str, Any]] = None,
+                   screenshot_hash: Optional[str] = None) -> None:
         """Add commit to database."""
         if self.conn is None:
             self.connect()
+        
+        # Ensure screenshot_hash column exists
+        self._ensure_screenshot_hash_column()
         
         cursor = self.conn.cursor()
         selected_mesh_names_json = json.dumps(selected_mesh_names) if selected_mesh_names else None
@@ -204,11 +217,28 @@ class ForesterDB:
         
         cursor.execute("""
             INSERT INTO commits (hash, branch, parent_hash, timestamp, message, tree_hash, author,
-                                commit_type, selected_mesh_names, export_options, tag)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                commit_type, selected_mesh_names, export_options, tag, screenshot_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (commit_hash, branch, parent_hash, timestamp, message, tree_hash, author,
-              commit_type, selected_mesh_names_json, export_options_json, None))
+              commit_type, selected_mesh_names_json, export_options_json, None, screenshot_hash))
         self.conn.commit()
+    
+    def _ensure_screenshot_hash_column(self) -> None:
+        """Ensure screenshot_hash column exists in commits table."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        # Check if screenshot_hash column exists
+        cursor.execute("PRAGMA table_info(commits)")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        if 'screenshot_hash' not in columns:
+            try:
+                cursor.execute("ALTER TABLE commits ADD COLUMN screenshot_hash TEXT")
+                self.conn.commit()
+            except sqlite3.OperationalError:
+                pass  # Column might have been added by another process
     
     def _ensure_tag_column(self) -> None:
         """Ensure tag column exists in commits table."""
