@@ -7,18 +7,15 @@ import logging
 from pathlib import Path
 from typing import Optional, Tuple, List
 from ..core.database import ForesterDB
-from ..core.ignore import IgnoreRules
 from ..core.storage import ObjectStorage
 from ..core.refs import (
     get_branch_ref,
-    get_current_branch,
-    set_branch_ref,
     get_current_head_commit
 )
 from ..models.commit import Commit
 from ..models.tree import Tree
 from ..models.mesh import Mesh
-from ..utils.filesystem import remove_directory, copy_file, ensure_directory
+from ..utils.filesystem import remove_directory
 from .commit import has_uncommitted_changes
 
 logger = logging.getLogger(__name__)
@@ -416,4 +413,3 @@ def checkout_commit(repo_path: Path, commit_hash: str, force: bool = False) -> T
         Tuple of (success: bool, error_message: Optional[str])
     """
     return checkout(repo_path, commit_hash, force)
-

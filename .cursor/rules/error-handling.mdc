@@ -1,0 +1,34 @@
+---
+description: Error Handling Patterns
+globs: ["**/*.py"]
+alwaysApply: true
+priority: 4
+---
+
+# Error Handling Patterns
+
+## Exception Types
+- Use specific exception types: `ValueError`, `OSError`, `PermissionError`
+- Never use bare `except:` - always specify exception type or `except Exception:`
+- Log exceptions with `exc_info=True` for debugging
+
+## Return Patterns
+- Return tuples `(bool, Optional[str])` for operations that can fail gracefully
+- Example: `def operation() -> Tuple[bool, Optional[str]]:`
+  - `(True, None)` - Success
+  - `(False, "error message")` - Failure with message
+
+## Repository Operations
+- Check repository existence before operations
+- Raise `ValueError` if repository required but not found
+- Return `None` or empty list for graceful failures when appropriate
+
+## Database Operations
+- Use context managers: `with ForesterDB(db_path) as db:`
+- Handle `sqlite3.OperationalError` for database-specific errors
+- Always commit after write operations
+
+## File Operations
+- Check `path.exists()` before file operations
+- Handle `OSError`, `PermissionError`, `ValueError` appropriately
+- Log all file operation errors with context

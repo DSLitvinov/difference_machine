@@ -17,8 +17,6 @@ from .commands import (
     switch_branch,
     delete_branch,
     checkout,
-    checkout_branch,
-    checkout_commit,
     create_stash,
     list_stashes,
     apply_stash,
@@ -27,6 +25,10 @@ from .commands import (
     delete_commit,
     rebuild_database,
     garbage_collect,
+    add_comment,
+    get_comments,
+    set_approval,
+    get_all_approvals,
 )
 from .commands.locking import (
     lock_file,
@@ -38,8 +40,6 @@ from .commands.locking import (
     check_commit_conflicts,
 )
 from .core.database import ForesterDB
-from .core.storage import ObjectStorage
-from .models.commit import Commit
 
 
 # ========== Helper Functions ==========
@@ -75,8 +75,6 @@ def _get_repo_path_or_none(path: Path) -> Optional[Path]:
     """
     repo_path = find_repository(path) if not (path / ".DFM").exists() else path
     return repo_path if repo_path else None
-
-
 
 
 # ========== Repository Management ==========
@@ -157,7 +155,7 @@ def has_changes(path: Path) -> bool:
         >>> if has_changes(repo_path):
         ...     print("You have uncommitted changes")
     """
-    repo_path = find_repository(path) if not (path / ".DFM").exists() else path
+    repo_path = _get_repo_path_or_none(path)
     if not repo_path:
         return False
 
@@ -732,7 +730,7 @@ def unlock_file_api(path: Path, file_path: str, locked_by: str,
     Example:
         >>> unlock_file_api(repo_path, "meshes/model.json", "john")
     """
-    repo_path = find_repository(path) if not (path / ".DFM").exists() else path
+    repo_path = _get_repo_path_or_none(path)
     if not repo_path:
         return False
 
@@ -808,7 +806,7 @@ def resolve_comment_api(path: Path, comment_id: int) -> bool:
         >>> resolve_comment_api(repo_path, 123)
     """
     from .commands.review import resolve_comment
-    repo_path = find_repository(path) if not (path / ".DFM").exists() else path
+    repo_path = _get_repo_path_or_none(path)
     if not repo_path:
         return False
 
@@ -830,7 +828,7 @@ def delete_comment_api(path: Path, comment_id: int) -> bool:
         >>> delete_comment_api(repo_path, 123)
     """
     from .commands.review import delete_comment
-    repo_path = find_repository(path) if not (path / ".DFM").exists() else path
+    repo_path = _get_repo_path_or_none(path)
     if not repo_path:
         return False
 
@@ -926,9 +924,8 @@ def garbage_collect_api(path: Path, dry_run: bool = False) -> Tuple[bool, Option
         >>> if success:
         ...     print(f"Deleted {stats['blobs_deleted']} blobs")
     """
-    repo_path = find_repository(path) if not (path / ".DFM").exists() else path
+    repo_path = _get_repo_path_or_none(path)
     if not repo_path:
         return (False, "Not a Forester repository", {})
 
     return garbage_collect(repo_path, dry_run)
-

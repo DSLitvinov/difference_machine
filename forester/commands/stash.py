@@ -8,14 +8,12 @@ import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from ..core.database import ForesterDB
-from ..core.ignore import IgnoreRules
 from ..core.storage import ObjectStorage
 from ..core.refs import get_current_branch
 from ..models.tree import Tree
-from ..models.commit import Commit
 from ..utils.filesystem import scan_directory
 from .commit import has_uncommitted_changes
-from .checkout import restore_files_from_tree, restore_meshes_from_commit
+from .checkout import restore_files_from_tree
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +53,6 @@ def create_stash(repo_path: Path, message: Optional[str] = None) -> Optional[str
     try:
         storage = ObjectStorage(dfm_dir)
         ignore_file = dfm_dir / ".dfmignore"
-        ignore_rules = IgnoreRules(ignore_file)
 
         # Determine working directory
         working_dir = repo_path / "working"
@@ -272,15 +269,10 @@ def delete_stash(repo_path: Path, stash_hash: str) -> bool:
         # Delete stash from database
         db.delete_stash(stash_hash)
 
-        # Check if tree is used by other stashes
-        other_stashes = db.list_stashes()
-        tree_used = any(s['tree_hash'] == tree_hash for s in other_stashes)
-
-        # If tree is not used, we could delete it, but for safety we'll keep it
+        # Note: We keep the tree even if not used by other stashes
         # (Similar to how git keeps objects even after stash deletion)
 
         return True
-
     finally:
         db.close()
 

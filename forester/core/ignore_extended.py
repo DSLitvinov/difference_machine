@@ -40,4 +40,3 @@ class ExtendedIgnoreRules(IgnoreRules):
             pass
 
         return False
-

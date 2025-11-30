@@ -48,7 +48,7 @@ class ForesterDB:
                     exc_info=True
                 )
                 # Continue without WAL mode if not supported
-            
+
             # Ensure schema is up to date for existing databases
             # Call ensure_schema_unsafe to avoid recursion (conn is already set)
             if db_exists:
@@ -353,7 +353,6 @@ class ForesterDB:
         """, (commit_hash, branch, parent_hash, timestamp, message, tree_hash, author,
               commit_type, selected_mesh_names_json, export_options_json, None, screenshot_hash))
         self.conn.commit()
-
 
     def get_commit(self, commit_hash: str) -> Optional[Dict[str, Any]]:
         """Get commit by hash."""
@@ -1066,7 +1065,6 @@ class ForesterDB:
         cursor.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
         self.conn.commit()
         return cursor.rowcount > 0
-
     # ========== Approvals operations (Review tools) ==========
 
     def set_approval(self, asset_hash: str, asset_type: str, approver: str,
@@ -1098,7 +1096,10 @@ class ForesterDB:
         self.conn.commit()
         return True
 
-    def get_approval(self, asset_hash: str, asset_type: str, approver: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get_approval(
+        self, asset_hash: str, asset_type: str,
+        approver: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         Get approval status for asset.
 
@@ -1162,4 +1163,3 @@ class ForesterDB:
 
         self.conn.commit()
         return cursor.rowcount > 0
-

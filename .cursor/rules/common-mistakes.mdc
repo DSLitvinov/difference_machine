@@ -1,0 +1,37 @@
+---
+description: Common Mistakes to Avoid
+globs: ["**/*.py"]
+alwaysApply: true
+priority: 5
+---
+
+# Common Mistakes to Avoid
+
+## Critical Rules
+
+1. **NEVER use `print()`** in production code - always use `logger`
+2. **NEVER use bare `except:`** - specify exception type
+3. **NEVER forget `self.conn.commit()`** after database writes
+4. **NEVER duplicate code** - extract to helper functions
+5. **NEVER use magic numbers** - use named constants
+6. **NEVER skip type hints** - always specify types
+7. **NEVER skip docstrings** for public functions
+8. **ALWAYS check repository existence** before operations
+9. **ALWAYS use context managers** for database connections
+10. **ALWAYS use `Path` objects** instead of strings for file paths
+
+## Code Review Checklist
+
+Before submitting code, ensure:
+- [ ] PEP 8 compliant (run `flake8 --max-line-length=120`)
+- [ ] No `print()` statements (use `logger`)
+- [ ] Type hints on all functions
+- [ ] Docstrings for all public functions
+- [ ] No unused imports
+- [ ] No unused variables
+- [ ] Proper error handling with logging
+- [ ] Repository path validation
+- [ ] Database commits after writes
+- [ ] Context managers for resources
+- [ ] No trailing whitespace
+- [ ] No blank lines at end of files
