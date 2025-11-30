@@ -7,6 +7,7 @@ from .database import ForesterDB
 from .ignore import IgnoreRules
 from .storage import ObjectStorage
 from .metadata import Metadata
+from .locking import FileLock, lock_file, unlock_file, is_file_locked, list_locks, check_files_locked
 
 __all__ = [
     "compute_hash",
@@ -16,5 +17,11 @@ __all__ = [
     "IgnoreRules",
     "ObjectStorage",
     "Metadata",
+    "FileLock",
+    "lock_file",
+    "unlock_file",
+    "is_file_locked",
+    "list_locks",
+    "check_files_locked",
 ]
 

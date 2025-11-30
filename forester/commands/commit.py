@@ -14,11 +14,13 @@ from ..models.tree import Tree
 from ..models.commit import Commit
 from ..models.mesh import Mesh
 from ..utils.filesystem import scan_directory
+from .locking import check_commit_conflicts
 
 logger = logging.getLogger(__name__)
 
 
-def create_commit(repo_path: Path, message: str, author: str = "Unknown") -> Optional[str]:
+def create_commit(repo_path: Path, message: str, author: str = "Unknown",
+                  check_locks: bool = True) -> Optional[str]:
     """
     Create a new commit from current working directory.
     
@@ -26,12 +28,13 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown") -> Opt
         repo_path: Path to repository root
         message: Commit message
         author: Author name
+        check_locks: If True, check for file locks before committing
         
     Returns:
         Commit hash if successful, None otherwise
         
     Raises:
-        ValueError: If repository is not initialized or no changes detected
+        ValueError: If repository is not initialized, no changes detected, or files are locked
     """
     dfm_dir = repo_path / ".DFM"
     if not dfm_dir.exists():
@@ -160,6 +163,17 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown") -> Opt
         
         # Save tree
         tree.save_to_storage(db, storage)
+        
+        # Check for file locks before committing
+        if check_locks and file_paths_to_check:
+            locked_files = check_commit_conflicts(repo_path, file_paths_to_check, author, branch)
+            if locked_files:
+                locked_paths = [f['file_path'] for f in locked_files]
+                locked_by = locked_files[0].get('locked_by', 'unknown')
+                raise ValueError(
+                    f"Files are locked by '{locked_by}': {', '.join(locked_paths[:5])}"
+                    + (f" and {len(locked_paths) - 5} more" if len(locked_paths) > 5 else "")
+                )
         
         # Step 5: Create commit object
         commit = Commit.create(

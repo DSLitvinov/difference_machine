@@ -162,6 +162,49 @@ class ForesterDB:
             )
         """)
         
+        # File locks table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS locks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT NOT NULL,
+                lock_type TEXT NOT NULL,
+                locked_by TEXT NOT NULL,
+                locked_at INTEGER NOT NULL,
+                expires_at INTEGER,
+                branch TEXT,
+                UNIQUE(file_path, branch)
+            )
+        """)
+        
+        # Comments table for review tools
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                asset_hash TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                author TEXT NOT NULL,
+                text TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                x REAL,
+                y REAL,
+                resolved INTEGER DEFAULT 0
+            )
+        """)
+        
+        # Approvals table for review workflow
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS approvals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                asset_hash TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                approver TEXT NOT NULL,
+                comment TEXT,
+                created_at INTEGER NOT NULL,
+                UNIQUE(asset_hash, asset_type, approver)
+            )
+        """)
+        
         # Initialize repository_state if it doesn't exist
         cursor.execute("""
             INSERT OR IGNORE INTO repository_state (id, current_branch, head)
@@ -193,6 +236,44 @@ class ForesterDB:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_stash_timestamp 
             ON stash(timestamp)
+        """)
+        
+        # Indexes for locks
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_locks_file_path 
+            ON locks(file_path)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_locks_branch 
+            ON locks(branch)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_locks_expires_at 
+            ON locks(expires_at)
+        """)
+        
+        # Indexes for comments
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_comments_asset 
+            ON comments(asset_hash, asset_type)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_comments_created_at 
+            ON comments(created_at)
+        """)
+        
+        # Indexes for approvals
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_approvals_asset 
+            ON approvals(asset_hash, asset_type)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_approvals_status 
+            ON approvals(status)
         """)
         
         self.conn.commit()
@@ -695,5 +776,366 @@ class ForesterDB:
             self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         except Exception:
             pass  # Игнорируем ошибки checkpoint
-
+    
+    # ========== File locking operations ==========
+    
+    def lock_file(self, file_path: str, lock_type: str, locked_by: str, 
+                  branch: Optional[str] = None, expires_after_seconds: Optional[int] = None) -> bool:
+        """
+        Lock a file to prevent concurrent modifications.
+        
+        Args:
+            file_path: Path to file (relative to repo root)
+            lock_type: Type of lock ('exclusive', 'shared')
+            locked_by: Username/identifier of person locking
+            branch: Branch name (optional, locks are per-branch)
+            expires_after_seconds: Lock expiration time in seconds (None = never expires)
+            
+        Returns:
+            True if lock acquired, False if already locked
+        """
+        if self.conn is None:
+            self.connect()
+        
+        import time
+        locked_at = int(time.time())
+        expires_at = None
+        if expires_after_seconds:
+            expires_at = locked_at + expires_after_seconds
+        
+        cursor = self.conn.cursor()
+        
+        # Clean up expired locks first
+        if expires_at is None:
+            cursor.execute("DELETE FROM locks WHERE file_path = ? AND branch = ? AND expires_at IS NOT NULL AND expires_at < ?",
+                         (file_path, branch, locked_at))
+        else:
+            cursor.execute("DELETE FROM locks WHERE file_path = ? AND branch = ? AND expires_at < ?",
+                         (file_path, branch, locked_at))
+        
+        # Check if file is already locked
+        cursor.execute("""
+            SELECT locked_by FROM locks 
+            WHERE file_path = ? AND branch = ? 
+            AND (expires_at IS NULL OR expires_at > ?)
+        """, (file_path, branch, locked_at))
+        
+        existing_lock = cursor.fetchone()
+        if existing_lock:
+            # Already locked
+            return False
+        
+        # Acquire lock
+        cursor.execute("""
+            INSERT INTO locks (file_path, lock_type, locked_by, locked_at, expires_at, branch)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (file_path, lock_type, locked_by, locked_at, expires_at, branch))
+        
+        self.conn.commit()
+        return True
+    
+    def unlock_file(self, file_path: str, locked_by: str, branch: Optional[str] = None) -> bool:
+        """
+        Unlock a file.
+        
+        Args:
+            file_path: Path to file
+            locked_by: Username/identifier (must match lock owner)
+            branch: Branch name (optional)
+            
+        Returns:
+            True if unlocked, False if not locked or not owned by user
+        """
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            DELETE FROM locks 
+            WHERE file_path = ? AND locked_by = ? AND branch = ?
+        """, (file_path, locked_by, branch))
+        
+        self.conn.commit()
+        return cursor.rowcount > 0
+    
+    def is_file_locked(self, file_path: str, branch: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Check if file is locked.
+        
+        Args:
+            file_path: Path to file
+            branch: Branch name (optional)
+            
+        Returns:
+            Lock information dict or None if not locked
+        """
+        if self.conn is None:
+            self.connect()
+        
+        import time
+        current_time = int(time.time())
+        
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT * FROM locks 
+            WHERE file_path = ? AND branch = ?
+            AND (expires_at IS NULL OR expires_at > ?)
+            ORDER BY locked_at DESC
+            LIMIT 1
+        """, (file_path, branch, current_time))
+        
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+    
+    def list_locks(self, branch: Optional[str] = None, locked_by: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        List all active locks.
+        
+        Args:
+            branch: Filter by branch (optional)
+            locked_by: Filter by user (optional)
+            
+        Returns:
+            List of lock dictionaries
+        """
+        if self.conn is None:
+            self.connect()
+        
+        import time
+        current_time = int(time.time())
+        
+        cursor = self.conn.cursor()
+        
+        if branch and locked_by:
+            cursor.execute("""
+                SELECT * FROM locks 
+                WHERE branch = ? AND locked_by = ?
+                AND (expires_at IS NULL OR expires_at > ?)
+                ORDER BY locked_at DESC
+            """, (branch, locked_by, current_time))
+        elif branch:
+            cursor.execute("""
+                SELECT * FROM locks 
+                WHERE branch = ?
+                AND (expires_at IS NULL OR expires_at > ?)
+                ORDER BY locked_at DESC
+            """, (branch, current_time))
+        elif locked_by:
+            cursor.execute("""
+                SELECT * FROM locks 
+                WHERE locked_by = ?
+                AND (expires_at IS NULL OR expires_at > ?)
+                ORDER BY locked_at DESC
+            """, (locked_by, current_time))
+        else:
+            cursor.execute("""
+                SELECT * FROM locks 
+                WHERE (expires_at IS NULL OR expires_at > ?)
+                ORDER BY locked_at DESC
+            """, (current_time,))
+        
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def cleanup_expired_locks(self) -> int:
+        """
+        Remove expired locks from database.
+        
+        Returns:
+            Number of locks removed
+        """
+        if self.conn is None:
+            self.connect()
+        
+        import time
+        current_time = int(time.time())
+        
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM locks WHERE expires_at IS NOT NULL AND expires_at <= ?", (current_time,))
+        self.conn.commit()
+        
+        return cursor.rowcount
+    
+    # ========== Comments operations (Review tools) ==========
+    
+    def add_comment(self, asset_hash: str, asset_type: str, author: str, text: str,
+                    x: Optional[float] = None, y: Optional[float] = None) -> int:
+        """
+        Add comment to asset (mesh, blob, commit).
+        
+        Args:
+            asset_hash: Hash of the asset
+            asset_type: Type ('mesh', 'blob', 'commit')
+            author: Author name
+            text: Comment text
+            x: X coordinate for annotation (optional)
+            y: Y coordinate for annotation (optional)
+            
+        Returns:
+            Comment ID
+        """
+        if self.conn is None:
+            self.connect()
+        
+        import time
+        created_at = int(time.time())
+        
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO comments (asset_hash, asset_type, author, text, created_at, x, y)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (asset_hash, asset_type, author, text, created_at, x, y))
+        
+        self.conn.commit()
+        return cursor.lastrowid
+    
+    def get_comments(self, asset_hash: str, asset_type: str, include_resolved: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get comments for asset.
+        
+        Args:
+            asset_hash: Hash of the asset
+            asset_type: Type ('mesh', 'blob', 'commit')
+            include_resolved: Include resolved comments
+            
+        Returns:
+            List of comment dictionaries
+        """
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        
+        if include_resolved:
+            cursor.execute("""
+                SELECT * FROM comments 
+                WHERE asset_hash = ? AND asset_type = ?
+                ORDER BY created_at ASC
+            """, (asset_hash, asset_type))
+        else:
+            cursor.execute("""
+                SELECT * FROM comments 
+                WHERE asset_hash = ? AND asset_type = ? AND resolved = 0
+                ORDER BY created_at ASC
+            """, (asset_hash, asset_type))
+        
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def resolve_comment(self, comment_id: int) -> bool:
+        """Mark comment as resolved."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        cursor.execute("UPDATE comments SET resolved = 1 WHERE id = ?", (comment_id,))
+        self.conn.commit()
+        return cursor.rowcount > 0
+    
+    def delete_comment(self, comment_id: int) -> bool:
+        """Delete comment."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
+        self.conn.commit()
+        return cursor.rowcount > 0
+    
+    # ========== Approvals operations (Review tools) ==========
+    
+    def set_approval(self, asset_hash: str, asset_type: str, approver: str, 
+                     status: str, comment: Optional[str] = None) -> bool:
+        """
+        Set approval status for asset.
+        
+        Args:
+            asset_hash: Hash of the asset
+            asset_type: Type ('mesh', 'blob', 'commit')
+            approver: Approver name
+            status: Status ('pending', 'approved', 'rejected')
+            comment: Optional comment
+            
+        Returns:
+            True if successful
+        """
+        if self.conn is None:
+            self.connect()
+        
+        import time
+        created_at = int(time.time())
+        
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO approvals (asset_hash, asset_type, status, approver, comment, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (asset_hash, asset_type, status, approver, comment, created_at))
+        
+        self.conn.commit()
+        return True
+    
+    def get_approval(self, asset_hash: str, asset_type: str, approver: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get approval status for asset.
+        
+        Args:
+            asset_hash: Hash of the asset
+            asset_type: Type ('mesh', 'blob', 'commit')
+            approver: Filter by approver (optional)
+            
+        Returns:
+            Approval dictionary or None
+        """
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        
+        if approver:
+            cursor.execute("""
+                SELECT * FROM approvals 
+                WHERE asset_hash = ? AND asset_type = ? AND approver = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (asset_hash, asset_type, approver))
+        else:
+            cursor.execute("""
+                SELECT * FROM approvals 
+                WHERE asset_hash = ? AND asset_type = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (asset_hash, asset_type))
+        
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+    
+    def get_all_approvals(self, asset_hash: str, asset_type: str) -> List[Dict[str, Any]]:
+        """Get all approvals for asset."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT * FROM approvals 
+            WHERE asset_hash = ? AND asset_type = ?
+            ORDER BY created_at DESC
+        """, (asset_hash, asset_type))
+        
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def delete_approval(self, asset_hash: str, asset_type: str, approver: str) -> bool:
+        """Delete approval."""
+        if self.conn is None:
+            self.connect()
+        
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            DELETE FROM approvals 
+            WHERE asset_hash = ? AND asset_type = ? AND approver = ?
+        """, (asset_hash, asset_type, approver))
+        
+        self.conn.commit()
+        return cursor.rowcount > 0
 

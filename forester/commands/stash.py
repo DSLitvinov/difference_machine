@@ -230,8 +230,8 @@ def apply_stash(repo_path: Path, stash_hash: str, force: bool = False) -> Tuple[
         from .checkout import clear_working_directory
         clear_working_directory(working_dir, dfm_dir)
         
-        # Restore files from tree
-        restore_files_from_tree(tree, working_dir, storage, db)
+        # Restore files from tree (no selective checkout for stash - restore all)
+        restore_files_from_tree(tree, working_dir, storage, db, file_patterns=None)
         
         # Note: Meshes are not restored from stash currently
         # This is a limitation - stash would need to store mesh_hashes

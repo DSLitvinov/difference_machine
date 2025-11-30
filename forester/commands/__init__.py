@@ -4,7 +4,7 @@ Contains all CLI commands for repository management.
 """
 
 from .init import init_repository, is_repository, find_repository
-from .commit import create_commit, has_uncommitted_changes, get_commit_screenshot
+from .commit import create_commit, has_uncommitted_changes, get_commit_screenshot, get_commit_screenshot
 from .branch import (
     create_branch,
     list_branches,
@@ -36,6 +36,24 @@ from .rebuild_database import (
 from .garbage_collect import (
     garbage_collect,
 )
+from .locking import (
+    lock_file,
+    unlock_file,
+    is_file_locked,
+    list_locks,
+    lock_files,
+    unlock_files,
+    check_commit_conflicts,
+)
+from .review import (
+    add_comment,
+    get_comments,
+    resolve_comment,
+    delete_comment,
+    set_approval,
+    get_approval,
+    get_all_approvals,
+)
 
 __all__ = [
     "init_repository",
@@ -44,6 +62,20 @@ __all__ = [
     "create_commit",
     "has_uncommitted_changes",
     "get_commit_screenshot",
+    "lock_file",
+    "unlock_file",
+    "is_file_locked",
+    "list_locks",
+    "lock_files",
+    "unlock_files",
+    "check_commit_conflicts",
+    "add_comment",
+    "get_comments",
+    "resolve_comment",
+    "delete_comment",
+    "set_approval",
+    "get_approval",
+    "get_all_approvals",
     "create_branch",
     "list_branches",
     "delete_branch",

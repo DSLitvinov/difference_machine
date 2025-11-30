@@ -4,7 +4,7 @@ Switches branches or commits and restores working directory.
 """
 
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from ..core.database import ForesterDB
 from ..core.ignore import IgnoreRules
 from ..core.storage import ObjectStorage
@@ -16,7 +16,9 @@ from ..utils.filesystem import remove_directory, copy_file, ensure_directory
 from .commit import has_uncommitted_changes
 
 
-def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, Optional[str]]:
+def checkout(repo_path: Path, target: str, force: bool = False,
+             file_patterns: Optional[List[str]] = None,
+             mesh_names: Optional[List[str]] = None) -> Tuple[bool, Optional[str]]:
     """
     Checkout a branch or commit.
     
@@ -24,6 +26,10 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
         repo_path: Path to repository root
         target: Branch name or commit hash
         force: If True, discard uncommitted changes without warning
+        file_patterns: List of file path patterns to selectively checkout (e.g., ["textures/*", "*.json"])
+                       If None, all files are checked out
+        mesh_names: List of mesh names to selectively checkout (only for mesh_only commits)
+                    If None, all meshes are checked out
         
     Returns:
         Tuple of (success: bool, error_message: Optional[str])
@@ -80,7 +86,7 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
         # Check commit type
         if commit.commit_type == "mesh_only":
             # Mesh-only checkout: restore only selected meshes, don't touch other files
-            restore_meshes_from_mesh_only_commit(commit, working_dir, storage, db, dfm_dir)
+            restore_meshes_from_mesh_only_commit(commit, working_dir, storage, db, dfm_dir, mesh_names)
         else:
             # Project checkout: restore files from commit
             # Step 1: Remove tracked files from current HEAD (if exists) to preserve untracked files
@@ -96,8 +102,8 @@ def checkout(repo_path: Path, target: str, force: bool = False) -> Tuple[bool, O
                 # No current HEAD or same commit, just remove files from new commit tree
                 remove_tracked_files_from_tree(tree, working_dir, dfm_dir)
             
-            # Step 2: Restore files from tree
-            restore_files_from_tree(tree, working_dir, storage, db)
+            # Step 2: Restore files from tree (with selective checkout)
+            restore_files_from_tree(tree, working_dir, storage, db, file_patterns)
             
             # Step 3: Restore meshes from commit
             restore_meshes_from_commit(commit, working_dir, storage, dfm_dir)
@@ -176,7 +182,7 @@ def remove_tracked_files_from_tree(tree: Tree, working_dir: Path, dfm_dir: Path)
 
 
 def restore_files_from_tree(tree: Tree, working_dir: Path, storage: ObjectStorage,
-                            db: ForesterDB) -> None:
+                            db: ForesterDB, file_patterns: Optional[List[str]] = None) -> None:
     """
     Restore files from tree to working directory.
     
@@ -185,11 +191,17 @@ def restore_files_from_tree(tree: Tree, working_dir: Path, storage: ObjectStorag
         working_dir: Working directory path
         storage: Object storage
         db: Database connection
+        file_patterns: Optional list of file path patterns to selectively restore
     """
     from ..models.blob import Blob
+    from ..utils.pattern_matching import match_patterns
     
     for entry in tree.entries:
         if entry.type != "blob":
+            continue
+        
+        # Selective checkout: check if file matches patterns
+        if file_patterns is not None and not match_patterns(entry.path, file_patterns):
             continue
         
         # Get destination path
@@ -221,7 +233,7 @@ def restore_files_from_tree(tree: Tree, working_dir: Path, storage: ObjectStorag
 
 def restore_meshes_from_mesh_only_commit(commit: Commit, working_dir: Path,
                                          storage: ObjectStorage, db: ForesterDB,
-                                         base_dir: Path) -> None:
+                                         base_dir: Path, mesh_names: Optional[List[str]] = None) -> None:
     """
     Restore meshes from mesh-only commit.
     Only restores selected meshes, doesn't touch other files.
@@ -232,6 +244,8 @@ def restore_meshes_from_mesh_only_commit(commit: Commit, working_dir: Path,
         storage: Object storage
         db: Database connection
         base_dir: Base directory (.DFM/)
+        mesh_names: Optional list of mesh names to selectively restore
+                    If None, all meshes are restored
     """
     if not commit.mesh_hashes or not commit.selected_mesh_names:
         return
@@ -246,6 +260,10 @@ def restore_meshes_from_mesh_only_commit(commit: Commit, working_dir: Path,
             break
         
         mesh_name = commit.selected_mesh_names[i]
+        
+        # Selective checkout: check if mesh name matches filter
+        if mesh_names is not None and mesh_name not in mesh_names:
+            continue
         
         try:
             # Load mesh
