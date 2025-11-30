@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_commit(repo_path: Path, message: str, author: str = "Unknown",
-                  check_locks: bool = True) -> Optional[str]:
+                  check_locks: bool = True, screenshot_hash: Optional[str] = None) -> Optional[str]:
     """
     Create a new commit from current working directory.
 
@@ -29,6 +29,7 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown",
         message: Commit message
         author: Author name
         check_locks: If True, check for file locks before committing
+        screenshot_hash: Optional screenshot blob hash
 
     Returns:
         Commit hash if successful, None otherwise
@@ -179,7 +180,8 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown",
             message=message,
             author=author,
             parent_hash=parent_hash,
-            mesh_hashes=mesh_hashes
+            mesh_hashes=mesh_hashes,
+            screenshot_hash=screenshot_hash
         )
 
         # Save commit

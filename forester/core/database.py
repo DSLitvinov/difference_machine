@@ -34,6 +34,7 @@ class ForesterDB:
     def connect(self) -> None:
         """Open database connection."""
         if self.conn is None:
+            db_exists = self.db_path.exists()
             self.conn = sqlite3.connect(self.db_path)
             self.conn.row_factory = sqlite3.Row  # Enable dict-like access
             # ВАЖНО: Настраиваем режим WAL для лучшей поддержки конкурентного доступа
@@ -47,6 +48,11 @@ class ForesterDB:
                     exc_info=True
                 )
                 # Continue without WAL mode if not supported
+            
+            # Ensure schema is up to date for existing databases
+            # Call ensure_schema_unsafe to avoid recursion (conn is already set)
+            if db_exists:
+                self._ensure_schema_unsafe()
 
     def close(self) -> None:
         """Close database connection."""
@@ -63,13 +69,42 @@ class ForesterDB:
         """Context manager exit."""
         self.close()
 
+    def ensure_schema(self) -> None:
+        """
+        Ensure database schema is up to date.
+        Creates missing tables and migrates columns if needed.
+        Safe to call multiple times.
+        """
+        if self.conn is None:
+            self.connect()
+        self._ensure_schema_unsafe()
+
+    def _ensure_schema_unsafe(self) -> None:
+        """
+        Internal method to ensure schema.
+        Assumes connection is already established.
+        """
+        # First create all tables
+        self._initialize_schema_unsafe()
+
+        # Then migrate columns in existing tables
+        cursor = self.conn.cursor()
+        self._migrate_commit_columns(cursor)
+        self.conn.commit()
+
     def initialize_schema(self) -> None:
         """
         Create database schema with all required tables.
         """
         if self.conn is None:
             self.connect()
+        self._initialize_schema_unsafe()
 
+    def _initialize_schema_unsafe(self) -> None:
+        """
+        Internal method to initialize schema.
+        Assumes connection is already established.
+        """
         cursor = self.conn.cursor()
 
         # Commits table
@@ -90,35 +125,6 @@ class ForesterDB:
                 screenshot_hash TEXT
             )
         """)
-
-        # Migrate existing tables (add new columns if they don't exist)
-        try:
-            cursor.execute("ALTER TABLE commits ADD COLUMN commit_type TEXT DEFAULT 'project'")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-
-        try:
-            cursor.execute("ALTER TABLE commits ADD COLUMN selected_mesh_names TEXT")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-
-        try:
-            cursor.execute("ALTER TABLE commits ADD COLUMN export_options TEXT")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-
-        try:
-            cursor.execute("ALTER TABLE commits ADD COLUMN tag TEXT")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-
-        try:
-            cursor.execute("ALTER TABLE commits ADD COLUMN screenshot_hash TEXT")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-
-        # Ensure screenshot_hash column exists (in case schema was created before this column was added)
-        self._ensure_screenshot_hash_column()
 
         # Trees table
         cursor.execute("""
@@ -220,13 +226,19 @@ class ForesterDB:
         """)
 
         self.conn.commit()
-        self.create_indexes()
+        self._create_indexes_unsafe()
 
     def create_indexes(self) -> None:
         """Create database indexes for performance."""
         if self.conn is None:
             self.connect()
+        self._create_indexes_unsafe()
 
+    def _create_indexes_unsafe(self) -> None:
+        """
+        Internal method to create indexes.
+        Assumes connection is already established.
+        """
         cursor = self.conn.cursor()
 
         # Indexes for commits
@@ -297,9 +309,6 @@ class ForesterDB:
         if self.conn is None:
             self.connect()
 
-        # Ensure screenshot_hash column exists
-        self._ensure_screenshot_hash_column()
-
         cursor = self.conn.cursor()
         selected_mesh_names_json = json.dumps(selected_mesh_names) if selected_mesh_names else None
         export_options_json = json.dumps(export_options) if export_options else None
@@ -312,39 +321,6 @@ class ForesterDB:
               commit_type, selected_mesh_names_json, export_options_json, None, screenshot_hash))
         self.conn.commit()
 
-    def _ensure_screenshot_hash_column(self) -> None:
-        """Ensure screenshot_hash column exists in commits table."""
-        if self.conn is None:
-            self.connect()
-
-        cursor = self.conn.cursor()
-        # Check if screenshot_hash column exists
-        cursor.execute("PRAGMA table_info(commits)")
-        columns = [row[1] for row in cursor.fetchall()]
-
-        if 'screenshot_hash' not in columns:
-            try:
-                cursor.execute("ALTER TABLE commits ADD COLUMN screenshot_hash TEXT")
-                self.conn.commit()
-            except sqlite3.OperationalError:
-                pass  # Column might have been added by another process
-
-    def _ensure_tag_column(self) -> None:
-        """Ensure tag column exists in commits table."""
-        if self.conn is None:
-            self.connect()
-
-        cursor = self.conn.cursor()
-        # Check if tag column exists
-        cursor.execute("PRAGMA table_info(commits)")
-        columns = [row[1] for row in cursor.fetchall()]
-
-        if 'tag' not in columns:
-            try:
-                cursor.execute("ALTER TABLE commits ADD COLUMN tag TEXT")
-                self.conn.commit()
-            except sqlite3.OperationalError:
-                pass  # Column might have been added by another process
 
     def get_commit(self, commit_hash: str) -> Optional[Dict[str, Any]]:
         """Get commit by hash."""
