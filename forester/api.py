@@ -57,7 +57,9 @@ def _get_repo_path(path: Path) -> Path:
     Raises:
         ValueError: If repository not found
     """
-    repo_path = _get_repo_path(path)
+    repo_path = find_repository(path) if not (path / ".DFM").exists() else path
+    if not repo_path:
+        raise ValueError(f"Not a Forester repository: {path}")
     return repo_path
 
 

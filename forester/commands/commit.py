@@ -61,23 +61,8 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown",
         if not working_dir.exists():
             working_dir = repo_path  # Fallback to repo root
 
-        # Create a custom ignore rules that also excludes meshes/
-        class ExtendedIgnoreRules(IgnoreRules):
-            def should_ignore(self, path: Path, base_path: Path) -> bool:
-                # First check standard ignore rules
-                if super().should_ignore(path, base_path):
-                    return True
-
-                # Also ignore meshes/ directory
-                try:
-                    rel_path = path.relative_to(base_path) if path.is_absolute() else path
-                    if str(rel_path).startswith("meshes/"):
-                        return True
-                except ValueError:
-                    pass
-
-                return False
-
+        # Use extended ignore rules that also exclude meshes/
+        from ..core.ignore_extended import ExtendedIgnoreRules
         extended_ignore = ExtendedIgnoreRules(ignore_file)
 
         # Scan files (excluding meshes/)
@@ -163,6 +148,9 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown",
 
         # Save tree
         tree.save_to_storage(db, storage)
+
+        # Collect file paths for lock checking
+        file_paths_to_check = [entry.path for entry in tree_entries]
 
         # Check for file locks before committing
         if check_locks and file_paths_to_check:

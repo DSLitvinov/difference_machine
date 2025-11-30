@@ -62,19 +62,8 @@ def create_stash(repo_path: Path, message: Optional[str] = None) -> Optional[str
         if not working_dir.exists():
             working_dir = repo_path
 
-        # Create extended ignore rules (exclude meshes/)
-        class ExtendedIgnoreRules(IgnoreRules):
-            def should_ignore(self, path: Path, base_path: Path) -> bool:
-                if super().should_ignore(path, base_path):
-                    return True
-                try:
-                    rel_path = path.relative_to(base_path) if path.is_absolute() else path
-                    if str(rel_path).startswith("meshes/"):
-                        return True
-                except ValueError:
-                    pass
-                return False
-
+        # Use extended ignore rules that also exclude meshes/
+        from ..core.ignore_extended import ExtendedIgnoreRules
         extended_ignore = ExtendedIgnoreRules(ignore_file)
 
         # Step 1: Scan and create blobs for files
