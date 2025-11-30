@@ -1,0 +1,290 @@
+# Cursor AI Rules for Difference Machine / Forester
+# Version control system for 3D models - Blender add-on
+
+## Project Overview
+This is a Git-like version control system for 3D models implemented as a Blender add-on.
+- **Core**: `forester/` - Version control engine (Forester)
+- **UI**: `ui/`, `operators/`, `properties/` - Blender add-on interface
+- **Storage**: SQLite database + file-based object storage
+
+## Code Style & PEP 8 Compliance
+
+### Python Style Guide
+- **PEP 8**: Strictly follow PEP 8 style guide
+- **Line Length**: Maximum 120 characters per line
+- **Import Order**: Standard library → Third-party → Local imports
+- **Type Hints**: Always use type hints for function parameters and return types
+- **Docstrings**: All public functions/classes must have Google-style docstrings
+
+### Formatting
+- Use 4 spaces for indentation (never tabs)
+- Maximum line length: 120 characters
+- Blank lines: 
+  - 2 blank lines before top-level function/class definitions
+  - 1 blank line before method definitions inside classes
+  - No blank lines at end of files (W391 violation)
+- Remove trailing whitespace
+- Remove unused imports (F401)
+- Remove unused variables (F841)
+
+### Logging
+- **NEVER use `print()`** - Always use `logger` from `logging` module
+- Import logger at module level: `logger = logging.getLogger(__name__)`
+- Use appropriate log levels:
+  - `logger.debug()` for detailed debugging info
+  - `logger.info()` for informational messages
+  - `logger.warning()` for warnings (not errors)
+  - `logger.error()` for errors with `exc_info=True` for exceptions
+- Example: `logger.error(f"Error message: {e}", exc_info=True)`
+
+## Architecture Patterns
+
+### Module Structure
+```
+forester/
+├── core/          # Core functionality (database, storage, hashing, ignore rules)
+├── models/        # Data models (Commit, Tree, Blob, Mesh)
+├── commands/      # High-level commands (commit, branch, checkout, stash)
+├── utils/         # Utility functions (filesystem, pattern matching, validation)
+└── api.py         # Public Python API for automation
+```
+
+### Database Operations (forester/core/database.py)
+- Always use context manager: `with ForesterDB(db_path) as db:`
+- Use `_unsafe` suffix for internal methods that assume connection exists
+- Migration pattern:
+  - `ensure_schema()` - Public entry point (handles connection)
+  - `_ensure_schema_unsafe()` - Internal (assumes connection, orchestrates)
+  - `_initialize_schema_unsafe()` - Creates all tables with `CREATE TABLE IF NOT EXISTS`
+  - `_migrate_commit_columns()` - Adds missing columns with `ALTER TABLE ADD COLUMN`
+- Always call `self.conn.commit()` after write operations
+- Use `exc_info=True` in exception handlers for proper logging
+
+### Repository Path Resolution
+- **Helper Functions**: Use `_get_repo_path()` or `_get_repo_path_or_none()` from `api.py`
+- Pattern: `repo_path = find_repository(path) if not (path / ".DFM").exists() else path`
+- Check for repository existence before operations
+- Raise `ValueError` if repository required but not found
+
+### Error Handling
+- Use specific exception types (ValueError, OSError, PermissionError)
+- Never use bare `except:` - always specify exception type or use `except Exception:`
+- Log exceptions with `exc_info=True` for debugging
+- Return tuples `(bool, Optional[str])` for operations that can fail gracefully
+
+### Data Models
+- All models in `forester/models/` inherit from basic Python classes
+- Models have `.hash` property (SHA-256)
+- Models have `.save_to_storage()` and `.from_storage()` methods
+- Use `@classmethod` for alternative constructors (e.g., `from_file()`, `from_directory()`)
+
+### Object Storage
+- Objects stored in `.DFM/objects/{type}/{hash[:2]}/{hash[2:]}`
+- Types: `blobs/`, `trees/`, `commits/`, `meshes/`
+- Always check if object exists before reading
+- Use `ObjectStorage` class for all storage operations
+
+## Import Patterns
+
+### Standard Imports
+```python
+import logging
+import json
+import time
+from pathlib import Path
+from typing import Optional, List, Dict, Any, Tuple
+```
+
+### TYPE_CHECKING Pattern
+```python
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .storage import ObjectStorage  # Avoid circular imports
+```
+
+### Internal vs External
+- Internal helpers: Use `_` prefix (e.g., `_get_repo_path()`)
+- Public API: No prefix (e.g., `init_repo()`)
+
+## Code Patterns
+
+### Function Signatures
+```python
+def function_name(
+    path: Path, 
+    optional_param: Optional[str] = None,
+    flag: bool = False
+) -> Tuple[bool, Optional[str]]:
+    """
+    Brief description.
+
+    Args:
+        path: Description
+        optional_param: Description
+        flag: Description
+
+    Returns:
+        Tuple of (success, error_message)
+
+    Raises:
+        ValueError: If something goes wrong
+    """
+```
+
+### Database Context Manager
+```python
+db_path = dfm_dir / "forester.db"
+with ForesterDB(db_path) as db:
+    # Database operations
+    result = db.get_commit(hash)
+```
+
+### File Operations
+- Use `pathlib.Path` instead of `os.path`
+- Check `path.exists()` before operations
+- Use `relative_to()` for path manipulation
+- Always handle `ValueError` from `relative_to()`
+
+### Ignore Rules
+- Use `IgnoreRules` for standard ignore patterns
+- Use `ExtendedIgnoreRules` for commits/stashes (excludes `meshes/` directory)
+- Pattern: Import from `forester.core.ignore_extended`
+
+### Git-like Operations
+- Commits: Create via `Commit.create()`, then `save_to_storage()`
+- Branches: Use `forester.core.refs` module for refs
+- Trees: Build from directory, then save
+- Meshes: Separate handling in `meshes/` directory
+
+## Blender-Specific Patterns
+
+### Operators (operators/)
+- Inherit from `bpy.types.Operator`
+- Use `bl_idname`, `bl_label`, `bl_description` properties
+- Access context: `context.scene`, `context.object`
+- Report errors: `self.report({'ERROR'}, "message")`
+
+### UI Panels (ui/)
+- Inherit from `bpy.types.Panel`
+- Use `bl_idname`, `bl_label`, `bl_space_type`, `bl_region_type`
+
+### Properties (properties/)
+- Use `bpy.types.PropertyGroup` for complex properties
+- Register in `register()` function
+- Use `bpy.props` for property definitions
+
+## Testing Patterns
+
+### Test Files
+- Location: `forester/test_*.py`
+- Test functions: `def test_function_name():`
+- Use `print()` in tests (acceptable for test output)
+- Use assertions: `assert condition, "error message"`
+
+## Common Mistakes to Avoid
+
+1. **NEVER use `print()`** in production code - use `logger`
+2. **NEVER use bare `except:`** - specify exception type
+3. **NEVER forget `self.conn.commit()`** after database writes
+4. **NEVER duplicate code** - extract to helper functions
+5. **NEVER use magic numbers** - use named constants
+6. **NEVER skip type hints** - always specify types
+7. **NEVER skip docstrings** for public functions
+8. **ALWAYS check repository existence** before operations
+9. **ALWAYS use context managers** for database connections
+10. **ALWAYS use `Path` objects** instead of strings for file paths
+
+## File Organization
+
+### New Files
+- Place in appropriate module (`core/`, `models/`, `commands/`, `utils/`)
+- Add imports to `__init__.py` if needed
+- Follow existing naming conventions
+
+### Refactoring
+- Extract duplicate code to helper functions
+- Move shared classes to appropriate modules
+- Update imports when moving code
+- Maintain backward compatibility
+
+## Database Schema
+
+### Tables
+- `commits` - Commit metadata
+- `trees` - Tree objects (directory structure)
+- `blobs` - File objects
+- `meshes` - Mesh objects
+- `stash` - Stash entries
+- `repository_state` - Current branch and HEAD
+- `locks` - File locking
+- `comments` - Review comments
+- `approvals` - Approval workflow
+
+### Migration Strategy
+- Always use `CREATE TABLE IF NOT EXISTS` for tables
+- Use `ALTER TABLE ADD COLUMN` for column additions
+- Check column existence with `PRAGMA table_info()` before adding
+- Call `ensure_schema()` on database connection if database exists
+
+## Code Review Checklist
+
+Before submitting code, ensure:
+- [ ] PEP 8 compliant (run `flake8 --max-line-length=120`)
+- [ ] No `print()` statements (use `logger`)
+- [ ] Type hints on all functions
+- [ ] Docstrings for all public functions
+- [ ] No unused imports
+- [ ] No unused variables
+- [ ] Proper error handling with logging
+- [ ] Repository path validation
+- [ ] Database commits after writes
+- [ ] Context managers for resources
+- [ ] No trailing whitespace
+- [ ] No blank lines at end of files
+
+## Examples
+
+### Good: Proper logging
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+def process_file(path: Path) -> bool:
+    try:
+        # Process file
+        return True
+    except OSError as e:
+        logger.error(f"Failed to process {path}: {e}", exc_info=True)
+        return False
+```
+
+### Bad: Using print
+```python
+def process_file(path: Path) -> bool:
+    try:
+        # Process file
+        return True
+    except OSError as e:
+        print(f"Error: {e}")  # ❌ NEVER DO THIS
+        return False
+```
+
+### Good: Repository path handling
+```python
+repo_path = _get_repo_path(path)  # Raises ValueError if not found
+# OR
+repo_path = _get_repo_path_or_none(path)
+if not repo_path:
+    return None  # Graceful failure
+```
+
+### Good: Database operations
+```python
+with ForesterDB(db_path) as db:
+    commit = db.get_commit(hash)
+    if commit:
+        # Process commit
+        pass
+```
+

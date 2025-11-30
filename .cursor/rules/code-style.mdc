@@ -1,0 +1,47 @@
+---
+description: Python Code Style - PEP 8 Compliance
+globs: ["**/*.py"]
+alwaysApply: true
+priority: 1
+---
+
+# Python Code Style Rules
+
+## PEP 8 Compliance
+- Strictly follow PEP 8 style guide
+- Maximum line length: 120 characters
+- Use 4 spaces for indentation (never tabs)
+- Import order: Standard library → Third-party → Local imports
+
+## Formatting
+- 2 blank lines before top-level function/class definitions
+- 1 blank line before method definitions inside classes
+- No blank lines at end of files (W391 violation)
+- Remove trailing whitespace
+- Remove unused imports (F401)
+- Remove unused variables (F841)
+
+## Type Hints
+- Always use type hints for function parameters and return types
+- Use `Optional[T]` for nullable types
+- Use `List[T]`, `Dict[K, V]`, `Tuple[...]` from typing module
+- Example: `def function(path: Path, optional: Optional[str] = None) -> bool:`
+
+## Docstrings
+- All public functions/classes must have Google-style docstrings
+- Format:
+```python
+def function_name(param: Type) -> ReturnType:
+    """
+    Brief description.
+
+    Args:
+        param: Description
+
+    Returns:
+        Description
+
+    Raises:
+        ValueError: If something goes wrong
+    """
+```

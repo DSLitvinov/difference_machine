@@ -1,0 +1,41 @@
+---
+description: Architecture Patterns and Module Structure
+globs: ["forester/**/*.py"]
+alwaysApply: true
+priority: 3
+---
+
+# Architecture Patterns
+
+## Module Structure
+```
+forester/
+├── core/          # Core functionality (database, storage, hashing, ignore rules)
+├── models/        # Data models (Commit, Tree, Blob, Mesh)
+├── commands/      # High-level commands (commit, branch, checkout, stash)
+├── utils/         # Utility functions (filesystem, pattern matching, validation)
+└── api.py         # Public Python API for automation
+```
+
+## Database Operations (forester/core/database.py)
+- Always use context manager: `with ForesterDB(db_path) as db:`
+- Use `_unsafe` suffix for internal methods that assume connection exists
+- Always call `self.conn.commit()` after write operations
+- Use `exc_info=True` in exception handlers
+
+## Repository Path Resolution
+- Use helper functions from `api.py`: `_get_repo_path()` or `_get_repo_path_or_none()`
+- Pattern: `repo_path = find_repository(path) if not (path / ".DFM").exists() else path`
+- Check for repository existence before operations
+- Raise `ValueError` if repository required but not found
+
+## File Operations
+- Use `pathlib.Path` instead of `os.path`
+- Check `path.exists()` before operations
+- Use `relative_to()` for path manipulation
+- Always handle `ValueError` from `relative_to()`
+
+## Data Models
+- All models have `.hash` property (SHA-256)
+- Models have `.save_to_storage()` and `.from_storage()` methods
+- Use `@classmethod` for alternative constructors (e.g., `from_file()`, `from_directory()`)
