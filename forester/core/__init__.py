@@ -11,7 +11,7 @@ from .locking import FileLock, lock_file, unlock_file, is_file_locked, list_lock
 
 __all__ = [
     "compute_hash",
-    "compute_file_hash", 
+    "compute_file_hash",
     "hash_to_path",
     "ForesterDB",
     "IgnoreRules",

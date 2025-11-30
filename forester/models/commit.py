@@ -17,7 +17,7 @@ class Commit:
     """
     Represents a commit in Forester repository.
     """
-    
+
     def __init__(self, hash: str, parent_hash: Optional[str], tree_hash: str,
                  branch: str, timestamp: int, message: str, author: str,
                  mesh_hashes: Optional[List[str]] = None,
@@ -27,7 +27,7 @@ class Commit:
                  screenshot_hash: Optional[str] = None):
         """
         Initialize commit.
-        
+
         Args:
             hash: SHA-256 hash of the commit
             parent_hash: Hash of parent commit (None for first commit)
@@ -54,13 +54,13 @@ class Commit:
         self.selected_mesh_names = selected_mesh_names or []
         self.export_options = export_options or {}
         self.screenshot_hash = screenshot_hash
-    
+
     def compute_hash(self) -> str:
         """
         Compute hash of the commit.
-        
+
         Hash is computed from: commit_type + parent_hash + tree_hash + timestamp + message + mesh_hashes + export_options
-        
+
         Returns:
             SHA-256 hash string
         """
@@ -68,14 +68,14 @@ class Commit:
         mesh_str = json.dumps(sorted(self.mesh_hashes), sort_keys=True) if self.mesh_hashes else ""
         mesh_names_str = json.dumps(sorted(self.selected_mesh_names), sort_keys=True) if self.selected_mesh_names else ""
         export_opts_str = json.dumps(self.export_options, sort_keys=True) if self.export_options else ""
-        
+
         commit_data = f"{self.commit_type}{parent_str}{self.tree_hash}{self.timestamp}{self.message}{mesh_str}{mesh_names_str}{export_opts_str}"
         return compute_hash(commit_data.encode('utf-8'))
-    
+
     def to_dict(self) -> dict:
         """
         Convert commit to dictionary.
-        
+
         Returns:
             Dictionary representation
         """
@@ -94,22 +94,22 @@ class Commit:
             "export_options": self.export_options,
             "screenshot_hash": screenshot_hash_str
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> 'Commit':
         """
         Create commit from dictionary.
-        
+
         Args:
             data: Dictionary representation
-            
+
         Returns:
             Commit instance
         """
         screenshot_hash = data.get('screenshot_hash')
         if screenshot_hash == "":
             screenshot_hash = None
-        
+
         return cls(
             hash=data.get('hash', ''),
             parent_hash=data.get('parent_hash'),
@@ -124,11 +124,11 @@ class Commit:
             export_options=data.get('export_options', {}),
             screenshot_hash=screenshot_hash
         )
-    
+
     def save_to_storage(self, db: ForesterDB, storage: ObjectStorage) -> None:
         """
         Save commit to storage and database.
-        
+
         Args:
             db: Database connection
             storage: Object storage
@@ -136,11 +136,11 @@ class Commit:
         # Compute hash if not set
         if not self.hash:
             self.hash = self.compute_hash()
-        
+
         # Save to storage
         commit_data = self.to_dict()
         storage.save_commit(commit_data, self.hash)
-        
+
         # Save to database
         db.add_commit(
             commit_hash=self.hash,
@@ -155,18 +155,18 @@ class Commit:
             export_options=self.export_options,
             screenshot_hash=self.screenshot_hash
         )
-    
+
     @classmethod
     def from_storage(cls, commit_hash: str, db: ForesterDB,
                      storage: ObjectStorage) -> Optional['Commit']:
         """
         Load commit from storage.
-        
+
         Args:
             commit_hash: SHA-256 hash of the commit
             db: Database connection
             storage: Object storage
-            
+
         Returns:
             Commit instance or None if not found
         """
@@ -186,13 +186,13 @@ class Commit:
                 commit_type = commit_info.get('commit_type', 'project')
                 selected_mesh_names = []
                 export_options = {}
-            
+
             screenshot_hash = commit_info.get('screenshot_hash')
             if commit_data and 'screenshot_hash' in commit_data:
                 screenshot_hash = commit_data.get('screenshot_hash')
             if screenshot_hash == "":
                 screenshot_hash = None
-            
+
             return cls(
                 hash=commit_info['hash'],
                 parent_hash=commit_info.get('parent_hash'),
@@ -207,14 +207,14 @@ class Commit:
                 export_options=export_options,
                 screenshot_hash=screenshot_hash
             )
-        
+
         # Try to load from storage
         try:
             commit_data = storage.load_commit(commit_hash)
             return cls.from_dict(commit_data)
         except FileNotFoundError:
             return None
-    
+
     @classmethod
     def create(cls, tree: Tree, branch: str, message: str, author: str,
                parent_hash: Optional[str] = None, mesh_hashes: Optional[List[str]] = None,
@@ -223,7 +223,7 @@ class Commit:
                screenshot_hash: Optional[str] = None) -> 'Commit':
         """
         Create a new commit.
-        
+
         Args:
             tree: Tree object
             branch: Branch name
@@ -235,12 +235,12 @@ class Commit:
             selected_mesh_names: List of selected mesh names (for mesh_only)
             export_options: Export options dict (for mesh_only)
             screenshot_hash: Hash of viewport screenshot blob (optional)
-            
+
         Returns:
             Commit instance
         """
         timestamp = int(time.time())
-        
+
         commit = cls(
             hash="",  # Will be computed
             parent_hash=parent_hash,
@@ -255,19 +255,19 @@ class Commit:
             export_options=export_options or {},
             screenshot_hash=screenshot_hash
         )
-        
+
         commit.hash = commit.compute_hash()
-        
+
         return commit
-    
+
     def get_tree(self, db: ForesterDB, storage: ObjectStorage) -> Optional[Tree]:
         """
         Get tree object for this commit.
-        
+
         Args:
             db: Database connection
             storage: Object storage
-            
+
         Returns:
             Tree instance or None if not found
         """
