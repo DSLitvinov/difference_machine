@@ -172,7 +172,7 @@ class DF_OT_checkout_commit(Operator):
         except (ValueError, FileNotFoundError) as e:
             self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
             logger.error(f"Failed to checkout commit: {e}", exc_info=True)
-                return {'CANCELLED'}
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
             logger.error(f"Unexpected error during checkout: {e}", exc_info=True)
@@ -212,7 +212,7 @@ class DF_OT_open_project_state(Operator):
         except (ValueError, FileNotFoundError) as e:
             self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
             logger.error(f"Failed to checkout commit: {e}", exc_info=True)
-                return {'CANCELLED'}
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")
             logger.error(f"Unexpected error during checkout: {e}", exc_info=True)
@@ -372,7 +372,7 @@ class DF_OT_compare_project(Operator):
             # Clean up on error
             if temp_working_dir.exists():
                 try:
-                shutil.rmtree(temp_working_dir)
+                    shutil.rmtree(temp_working_dir)
                 except Exception:
                     pass
             return {'CANCELLED'}
@@ -438,7 +438,7 @@ class DF_OT_compare_project(Operator):
             # Clean up on error
             if temp_working_dir.exists():
                 try:
-                shutil.rmtree(temp_working_dir)
+                    shutil.rmtree(temp_working_dir)
                 except Exception:
                     pass
             return {'CANCELLED'}
@@ -481,7 +481,7 @@ class DF_OT_delete_commit(Operator):
         except (ValueError, FileNotFoundError) as e:
             self.report({'ERROR'}, f"Failed to delete commit: {str(e)}")
             logger.error(f"Failed to delete commit: {e}", exc_info=True)
-                return {'CANCELLED'}
+            return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to delete commit: {str(e)}")
             logger.error(f"Unexpected error deleting commit: {e}", exc_info=True)

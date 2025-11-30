@@ -103,6 +103,9 @@ class DF_OT_create_project_commit(Operator):
             if commit_hash:
                 self.report({'INFO'}, f"Commit created: {commit_hash[:16]}...")
                 
+                # Clear message field after successful commit
+                props.message = ""
+                
                 # Check and run automatic garbage collection if enabled
                 from .operator_helpers import check_and_run_garbage_collect
                 check_and_run_garbage_collect(context, repo_path)
@@ -263,6 +266,9 @@ class DF_OT_create_mesh_commit(Operator):
             
             if commit_hash:
                 self.report({'INFO'}, f"Mesh commit created: {commit_hash[:16]}...")
+                
+                # Clear message field after successful commit
+                props.message = ""
                 
                 # Auto-compress if enabled (use preference setting)
                 if prefs.auto_compress:

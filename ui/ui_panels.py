@@ -347,8 +347,6 @@ class DF_PT_history_panel(Panel):
                 box = layout.box()
                 
                 # Commit details
-                if commit.selected_mesh_names:
-                    box.label(text=f"Meshes: {commit.selected_mesh_names}")
                 box.label(text=f"Author: {commit.author}")
                 box.label(text=f"Hash: {commit.hash[:16]}...")
                 
@@ -364,7 +362,7 @@ class DF_PT_history_panel(Panel):
                 
                 # Action buttons - для mesh_only коммитов показываем Replace и Compare
                 if commit.commit_type == "mesh_only":
-                    # Проверка: показываем кнопки только если выбранный объект есть в коммите
+                    # Display mesh information for all meshes in the commit
                     mesh_names_str = commit.selected_mesh_names or ""
                     
                     # Парсим selected_mesh_names (может быть JSON строка или обычная строка)
@@ -378,6 +376,60 @@ class DF_PT_history_panel(Panel):
                     except:
                         mesh_names = [mesh_names_str] if mesh_names_str else []
                     
+                    # Load and display mesh information
+                    if mesh_names:
+                        layout.separator()
+                        mesh_info_box = layout.box()
+                        mesh_info_box.label(text="Meshes in Commit:", icon='MESH_DATA')
+                        
+                        # Try to load mesh data from commit
+                        try:
+                            from pathlib import Path
+                            from ..forester.commands import find_repository
+                            from ..forester.core.database import ForesterDB
+                            from ..forester.core.storage import ObjectStorage
+                            from ..forester.models.commit import Commit
+                            from ..forester.models.mesh import Mesh
+                            
+                            blend_file = Path(bpy.data.filepath) if bpy.data.filepath else None
+                            if blend_file:
+                                repo_path = find_repository(blend_file.parent)
+                                if repo_path:
+                                    dfm_dir = repo_path / ".DFM"
+                                    db_path = dfm_dir / "forester.db"
+                                    
+                                    with ForesterDB(db_path) as db:
+                                        storage = ObjectStorage(dfm_dir)
+                                        commit_obj = Commit.from_storage(commit.hash, db, storage)
+                                        
+                                        if commit_obj and commit_obj.mesh_hashes:
+                                            # Display each mesh with its information
+                                            for i, mesh_name in enumerate(mesh_names):
+                                                if i < len(commit_obj.mesh_hashes):
+                                                    mesh_hash = commit_obj.mesh_hashes[i]
+                                                    mesh = Mesh.from_storage(mesh_hash, db, storage)
+                                                    
+                                                    if mesh and mesh.mesh_json:
+                                                        mesh_box = mesh_info_box.box()
+                                                        row = mesh_box.row()
+                                                        row.label(text=f"Object: {mesh_name}", icon='MESH_DATA')
+                                                        
+                                                        # Get vertices and faces count
+                                                        vertices = mesh.mesh_json.get('vertices', [])
+                                                        faces = mesh.mesh_json.get('faces', [])
+                                                        
+                                                        row = mesh_box.row()
+                                                        row.label(text=f"Vertices: {len(vertices)}")
+                                                        row.label(text=f"Faces: {len(faces)}")
+                        except Exception:
+                            # If we can't load mesh data, just show names
+                            for mesh_name in mesh_names:
+                                mesh_box = mesh_info_box.box()
+                                row = mesh_box.row()
+                                row.label(text=f"Object: {mesh_name}", icon='MESH_DATA')
+                    
+                    # mesh_names уже определены выше при отображении информации о мешах
+                    # Проверка: показываем кнопки только если выбранный объект есть в коммите
                     # Если активен объект сравнения, показываем кнопки только для коммита, который использовался для его создания
                     if is_comparison_object:
                         if commit.hash == comparison_commit_hash:
