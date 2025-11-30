@@ -214,8 +214,7 @@ class DF_OT_create_mesh_commit(Operator):
                 return {'CANCELLED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to create commit: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Unexpected error creating mesh commit: {e}", exc_info=True)
             return {'CANCELLED'}
 
 

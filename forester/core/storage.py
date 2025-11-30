@@ -45,6 +45,10 @@ class ObjectStorage:
         blob_path = hash_to_path(blob_hash, self.base_dir, "blobs")
         blob_path.parent.mkdir(parents=True, exist_ok=True)
         
+        # Check if blob already exists on disk to avoid unnecessary write
+        if blob_path.exists():
+            return blob_path
+        
         with open(blob_path, 'wb') as f:
             f.write(data)
         

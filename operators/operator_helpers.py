@@ -38,6 +38,62 @@ def get_addon_preferences(context):
     return DefaultPreferences()
 
 
+def cleanup_old_preview_temp(repo_path: Path, keep_current: Optional[str] = None) -> None:
+    """
+    Clean up old preview_temp directories, optionally keeping a specific one.
+    
+    Args:
+        repo_path: Path to repository root
+        keep_current: Optional path to current preview directory to keep (as string)
+    """
+    import shutil
+    
+    dfm_dir = repo_path / ".DFM"
+    if not dfm_dir.exists():
+        return
+    
+    temp_dir = dfm_dir / "preview_temp"
+    if not temp_dir.exists():
+        return
+    
+    try:
+        # Get current directory path as Path if provided
+        keep_path = None
+        if keep_current:
+            keep_path = Path(keep_current)
+            if not keep_path.exists():
+                keep_path = None  # If path doesn't exist, don't try to keep it
+        
+        # Find all commit directories in preview_temp
+        removed_count = 0
+        total_size = 0
+        
+        for item in temp_dir.iterdir():
+            if not item.is_dir():
+                continue
+            
+            # Skip if this is the current preview directory
+            if keep_path and item.resolve() == keep_path.resolve():
+                continue
+            
+            # Remove old preview directory
+            try:
+                # Calculate size before removal
+                size = sum(f.stat().st_size for f in item.rglob('*') if f.is_file())
+                shutil.rmtree(item)
+                removed_count += 1
+                total_size += size
+                logger.debug(f"Removed old preview_temp directory: {item.name} ({size / (1024*1024):.1f} MB)")
+            except Exception as e:
+                logger.warning(f"Failed to remove preview_temp directory {item.name}: {e}")
+        
+        if removed_count > 0:
+            logger.info(f"Cleaned up {removed_count} old preview_temp directories ({total_size / (1024*1024):.1f} MB freed)")
+    
+    except Exception as e:
+        logger.warning(f"Failed to clean up preview_temp directories: {e}", exc_info=True)
+
+
 def check_and_run_garbage_collect(context, repo_path: Path) -> None:
     """
     Check if garbage collection should run and execute it if needed.

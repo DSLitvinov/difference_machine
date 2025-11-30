@@ -435,7 +435,7 @@ def load_mesh_from_commit(repo_path: Path, commit_hash: str, mesh_name: str) -> 
 
 
 def import_mesh_to_blender(context, mesh_json, material_json, obj_name: str, mode: str = 'NEW', 
-                          mesh_storage_path: Path = None):
+                          mesh_storage_path: Path = None, material_prefix: str = None):
     """
     Import mesh JSON data to Blender with texture loading.
     
@@ -446,6 +446,7 @@ def import_mesh_to_blender(context, mesh_json, material_json, obj_name: str, mod
         obj_name: Object name
         mode: 'NEW' to create new object, 'SELECTED' to replace selected object
         mesh_storage_path: Path to mesh storage directory (for loading textures)
+        material_prefix: Optional prefix to add to material name (e.g., "_compare_")
     """
     if mode == 'NEW':
         # Create new mesh and object
@@ -495,14 +496,32 @@ def import_mesh_to_blender(context, mesh_json, material_json, obj_name: str, mod
         # Clear existing materials
         mesh.materials.clear()
         
-        # Create or get material
-        mat_name = material_json['name']
-        if mat_name in bpy.data.materials:
-            mat = bpy.data.materials[mat_name]
+        # Create material name with optional prefix
+        base_mat_name = material_json['name']
+        if material_prefix:
+            mat_name = f"{material_prefix}{base_mat_name}"
         else:
+            mat_name = base_mat_name
+        
+        # Create new material if prefix is provided or material doesn't exist
+        # If material exists and no prefix, we need to ensure node_tree is cleared
+        if material_prefix or mat_name not in bpy.data.materials:
             mat = bpy.data.materials.new(name=mat_name)
+        else:
+            # Material exists - we need to clear and rebuild node_tree to ensure textures load correctly
+            mat = bpy.data.materials[mat_name]
+            # Clear existing node tree to avoid conflicts with old texture references
+            if mat.node_tree:
+                mat.node_tree.nodes.clear()
         
         mat.use_nodes = material_json.get('use_nodes', True)
+        
+        # Ensure node_tree exists (Blender creates it automatically when use_nodes=True)
+        # But we need to make sure it's there before we clear/import
+        if mat.use_nodes and not mat.node_tree:
+            # Force node_tree creation (shouldn't happen, but just in case)
+            mat.use_nodes = False
+            mat.use_nodes = True
         
         # Restore basic properties
         if 'diffuse_color' in material_json:
@@ -516,10 +535,11 @@ def import_mesh_to_blender(context, mesh_json, material_json, obj_name: str, mod
         
         # Restore node tree structure with textures loaded during node creation
         if mat.use_nodes and 'node_tree' in material_json and material_json['node_tree']:
-            textures_info = material_json.get('textures', []) if 'textures' in material_json else None
-            import_node_tree_structure(mat.node_tree, material_json['node_tree'], 
-                                     textures_info=textures_info, 
-                                     mesh_storage_path=mesh_storage_path)
+            if mat.node_tree:
+                textures_info = material_json.get('textures', []) if 'textures' in material_json else None
+                import_node_tree_structure(mat.node_tree, material_json['node_tree'], 
+                                         textures_info=textures_info, 
+                                         mesh_storage_path=mesh_storage_path)
         
         mesh.materials.append(mat)
     
@@ -551,6 +571,8 @@ def import_node_tree_structure(node_tree, node_tree_data, textures_info=None, me
         logger.error("node_tree is None or invalid")
         return
     
+    logger.debug(f"Importing node tree structure. nodes count: {len(node_tree_data.get('nodes', []))}, textures_info: {len(textures_info) if textures_info else 0}, mesh_storage_path: {mesh_storage_path}")
+    
     # Clear existing nodes (like in difference_engine)
     node_tree.nodes.clear()
     
@@ -558,17 +580,20 @@ def import_node_tree_structure(node_tree, node_tree_data, textures_info=None, me
     created_nodes = {}
     
     # Build texture lookup map by node name
+    # Build it even if mesh_storage_path is missing - we'll still try to load from original paths
     texture_map = {}
-    if textures_info and mesh_storage_path:
+    if textures_info:
         for tex_info in textures_info:
             node_name = tex_info.get('node_name')
             if node_name:
                 texture_map[node_name] = tex_info
+                logger.debug(f"Added texture to map: node_name={node_name}, copied={tex_info.get('copied')}, commit_path={tex_info.get('commit_path')}, original_path={tex_info.get('original_path')}")
     
     # Get textures directory
     textures_dir = None
     if mesh_storage_path:
         textures_dir = mesh_storage_path / "textures"
+        logger.debug(f"Textures directory: {textures_dir}, exists: {textures_dir.exists() if textures_dir else False}")
     
     # Create nodes
     for node_data in node_tree_data.get('nodes', []):
@@ -593,8 +618,9 @@ def import_node_tree_structure(node_tree, node_tree_data, textures_info=None, me
         
         try:
             node = node_tree.nodes.new(type=node_type)
+            logger.debug(f"Created node: {node.name} (type: {node_type}, original: {original_type})")
         except Exception as e:
-            logger.warning(f"Failed to create node type '{node_type}' (from '{original_type}'): {e}")
+            logger.error(f"Failed to create node type '{node_type}' (from '{original_type}'): {e}")
             continue
         
         # Set node properties safely
@@ -612,8 +638,12 @@ def import_node_tree_structure(node_tree, node_tree_data, textures_info=None, me
                 node.width = float(width)
         
         # Handle image texture nodes FIRST (before other properties that depend on image being loaded)
+        # Note: We create TEX_IMAGE nodes even if textures_dir doesn't exist
+        # The function will try to load the texture but won't fail if it can't find it
         if original_type == 'TEX_IMAGE':
+            logger.debug(f"Importing image texture node: {node.name}, textures_dir: {textures_dir}")
             _import_image_texture(node, node_data, texture_map, textures_dir)
+            logger.debug(f"Finished importing image texture node: {node.name}, has image: {hasattr(node, 'image') and node.image is not None}")
         
         # Restore node properties (AFTER image is loaded for TEX_IMAGE nodes)
         if 'properties' in node_data:
@@ -667,8 +697,13 @@ def import_node_tree_structure(node_tree, node_tree_data, textures_info=None, me
 
 def _import_image_texture(node, node_data, texture_map, textures_dir):
     """Import image texture node with multiple path resolution strategies"""
+    # Note: We don't return early if textures_dir doesn't exist
+    # The node is already created, we just try to load the image
+    # If textures_dir is missing, we'll try alternative paths (original_path, etc.)
     if not textures_dir or not textures_dir.exists():
-        return
+        logger.debug(f"Textures directory doesn't exist: {textures_dir}, trying alternative paths")
+        # Don't return - continue to try alternative paths
+        textures_dir = None
     
     # Build candidate paths (like in difference_engine)
     candidate_paths = []
@@ -676,7 +711,7 @@ def _import_image_texture(node, node_data, texture_map, textures_dir):
     texture_info = texture_map.get(node_name)
     
     # 1. Try copied_texture from node_data (primary method, like in difference_engine)
-    if 'copied_texture' in node_data:
+    if 'copied_texture' in node_data and textures_dir:
         copied_tex = node_data['copied_texture']
         # Handle both cases: just filename or path with "textures/"
         if copied_tex.startswith('textures/'):
@@ -686,19 +721,22 @@ def _import_image_texture(node, node_data, texture_map, textures_dir):
     
     # 2. Try texture_info from texture_map (for backward compatibility)
     if texture_info:
-        if texture_info.get('copied') and texture_info.get('commit_path'):
-            commit_path = texture_info['commit_path']
-            if commit_path.startswith('textures/'):
-                commit_path = commit_path.replace('textures/', '', 1)
-            candidate_paths.append(str(textures_dir / commit_path))
-        if texture_info.get('original_path'):
-            original_basename = os.path.basename(texture_info['original_path'])
-            candidate_paths.append(str(textures_dir / original_basename))
+        if textures_dir:
+            if texture_info.get('copied') and texture_info.get('commit_path'):
+                commit_path = texture_info['commit_path']
+                if commit_path.startswith('textures/'):
+                    commit_path = commit_path.replace('textures/', '', 1)
+                candidate_paths.append(str(textures_dir / commit_path))
+            if texture_info.get('original_path'):
+                original_basename = os.path.basename(texture_info['original_path'])
+                candidate_paths.append(str(textures_dir / original_basename))
     
     # 3. Try image_file from node_data (like in difference_engine)
     if 'image_file' in node_data:
         image_file = node_data['image_file']
-        candidate_paths.append(os.path.join(str(textures_dir), os.path.basename(image_file)))
+        if textures_dir:
+            candidate_paths.append(os.path.join(str(textures_dir), os.path.basename(image_file)))
+        # Always try absolute path (works even if textures_dir doesn't exist)
         candidate_paths.append(bpy.path.abspath(image_file))
     
     # 4. Try original path from texture_info (for backward compatibility)
