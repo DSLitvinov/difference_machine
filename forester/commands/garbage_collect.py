@@ -324,6 +324,27 @@ def garbage_collect(repo_path: Path, dry_run: bool = False) -> Tuple[bool, Optio
             logger.info(f"{action} {stats['commits_deleted']} commits, {stats['trees_deleted']} trees, "
                        f"{stats['blobs_deleted']} blobs, {stats['meshes_deleted']} meshes")
             
+            # Step 5: Clean up temporary directories (preview_temp and compare_temp)
+            logger.info("Cleaning up temporary directories...")
+            temp_dirs_to_clean = [
+                dfm_dir / "preview_temp",
+                dfm_dir / "compare_temp"
+            ]
+            
+            for temp_dir in temp_dirs_to_clean:
+                if temp_dir.exists() and temp_dir.is_dir():
+                    try:
+                        if not dry_run:
+                            import shutil
+                            shutil.rmtree(temp_dir)
+                            logger.debug(f"Cleaned up temporary directory: {temp_dir.name}")
+                        else:
+                            # Count files in directory for dry run
+                            file_count = sum(1 for _ in temp_dir.rglob("*") if _.is_file())
+                            logger.debug(f"Would clean up temporary directory: {temp_dir.name} ({file_count} files)")
+                    except (OSError, PermissionError) as e:
+                        logger.warning(f"Failed to clean up temporary directory {temp_dir.name}: {e}")
+            
             return True, None, stats
             
     except Exception as e:
