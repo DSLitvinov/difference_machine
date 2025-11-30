@@ -92,6 +92,39 @@ class ForesterDB:
         self._migrate_commit_columns(cursor)
         self.conn.commit()
 
+    def _migrate_commit_columns(self, cursor) -> None:
+        """
+        Migrate commits table columns for backwards compatibility.
+        Adds missing columns to existing commits table.
+        """
+        try:
+            # Check which columns exist
+            cursor.execute("PRAGMA table_info(commits)")
+            existing_columns = {row[1] for row in cursor.fetchall()}
+
+            # Columns to add if missing
+            columns_to_add = {
+                'commit_type': "TEXT DEFAULT 'project'",
+                'selected_mesh_names': 'TEXT',
+                'export_options': 'TEXT',
+                'tag': 'TEXT',
+                'screenshot_hash': 'TEXT',
+            }
+
+            for column_name, column_def in columns_to_add.items():
+                if column_name not in existing_columns:
+                    try:
+                        cursor.execute(
+                            f"ALTER TABLE commits ADD COLUMN {column_name} {column_def}"
+                        )
+                        logger.info(f"Migrated: Added column '{column_name}' to commits table")
+                    except sqlite3.OperationalError:
+                        # Column might have been added by another process
+                        pass
+        except sqlite3.OperationalError:
+            # Table might not exist yet (will be created by initialize_schema)
+            pass
+
     def initialize_schema(self) -> None:
         """
         Create database schema with all required tables.
