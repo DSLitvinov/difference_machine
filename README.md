@@ -10,7 +10,10 @@ Difference Machine is a Blender add-on that provides Git-like version control fu
 
 ### Commit Management
 - **Create Commits**: Create full project commits or mesh-only commits for selected objects
+  - Message field automatically clears after successful commit creation
 - **Commit History**: View commit history with author, timestamp, and commit details
+  - For mesh-only commits: displays detailed information about all meshes (name, vertices, faces count)
+  - Clickable mesh names to select objects in viewport
 - **Delete Commits**: Remove unwanted commits from history
 - **Open Project State**: Restore entire project state from any commit
 
@@ -26,6 +29,10 @@ Difference Machine is a Blender add-on that provides Git-like version control fu
   - Visual side-by-side comparison
 - **Replace Mesh**: Replace current mesh with version from commit
 - **Load Mesh Version**: Load mesh from specific commit
+- **Mesh Information Display**: When viewing mesh-only commits, see detailed info for all meshes
+  - Object name (clickable to select in viewport)
+  - Vertices count
+  - Faces count
 - **Export Options**: Control what gets exported (vertices, faces, UV, normals, materials, transform)
 
 ### Material & Texture Handling

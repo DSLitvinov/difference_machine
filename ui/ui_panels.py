@@ -416,23 +416,23 @@ class DF_PT_history_panel(Panel):
                                                         vertices = mesh.mesh_json.get('vertices', [])
                                                         faces = mesh.mesh_json.get('faces', [])
                                                         
-                                                        # Make the entire box clickable - first row with object name
+                                                        # Make only object name clickable
                                                         row = mesh_box.row()
-                                                        op = row.operator("df.select_mesh_from_commit", text=f"Object: {mesh_name}", icon='MESH_DATA', emboss=False)
+                                                        row.scale_y = 1.3  # Увеличиваем высоту для более явного hover
+                                                        op = row.operator("df.select_mesh_from_commit", text=f"Object: {mesh_name}", icon='MESH_DATA', emboss=True)
                                                         op.mesh_name = mesh_name
                                                         
-                                                        # Second row with vertices and faces (also clickable)
+                                                        # Second row with vertices and faces (not clickable)
                                                         row = mesh_box.row()
-                                                        op = row.operator("df.select_mesh_from_commit", text=f"Vertices: {len(vertices)}", emboss=False)
-                                                        op.mesh_name = mesh_name
-                                                        op = row.operator("df.select_mesh_from_commit", text=f"Faces: {len(faces)}", emboss=False)
-                                                        op.mesh_name = mesh_name
+                                                        row.label(text=f"Vertices: {len(vertices)}")
+                                                        row.label(text=f"Faces: {len(faces)}")
                         except Exception:
                             # If we can't load mesh data, just show names (clickable)
                             for mesh_name in mesh_names:
                                 mesh_box = mesh_info_box.box()
                                 row = mesh_box.row()
-                                op = row.operator("df.select_mesh_from_commit", text=f"Object: {mesh_name}", icon='MESH_DATA', emboss=False)
+                                row.scale_y = 1.3  # Увеличиваем высоту для более явного hover
+                                op = row.operator("df.select_mesh_from_commit", text=f"Object: {mesh_name}", icon='MESH_DATA', emboss=True)
                                 op.mesh_name = mesh_name
                     
                     # mesh_names уже определены выше при отображении информации о мешах

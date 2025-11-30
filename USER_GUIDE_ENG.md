@@ -97,6 +97,7 @@ After initialization, the following will be created in your project folder:
      - **UV Layout** – UV maps
 5. Enter a commit message (e.g., "Added details to sword").
 6. Click **"Create Commit"**.
+   - The message field automatically clears after successful commit creation.
 
 **Features:**
 - Only selected objects, their materials, and textures are saved.
@@ -115,6 +116,7 @@ After initialization, the following will be created in your project folder:
 2. Choose **"Full Project"** mode.
 3. Enter a commit message.
 4. Click **"Create Commit"**.
+   - The message field automatically clears after successful commit creation.
 
 **Features:**
 - Saves all project files (`.blend` files, textures, etc.)
@@ -172,9 +174,19 @@ After initialization, the following will be created in your project folder:
      - Author
      - Timestamp
      - Commit type (`project` or `mesh_only`)
-     - For `mesh_only`: list of saved meshes
+     - For `mesh_only`: detailed information about all meshes in the commit
+       - Object name (clickable to select in viewport)
+       - Vertices count
+       - Faces count
 
 ### Restoring a Mesh from a Commit (Mesh-only)
+
+**Viewing Mesh Information:**
+- When you select a `mesh_only` commit, the panel displays detailed information about all meshes in the commit:
+  - Object name (clickable - clicking selects the object in the viewport)
+  - Vertices count
+  - Faces count
+- This helps you quickly identify which meshes are included in the commit.
 
 **Option 1: Replace Mesh**
 1. Select a mesh in the scene (must match the name in the commit).
@@ -184,6 +196,9 @@ After initialization, the following will be created in your project folder:
 
 **Option 2: Compare**  
 See [Comparing Versions](#comparing-versions).
+
+**Quick Selection:**
+- Click on any mesh name in the commit details to automatically select that object in the viewport.
 
 ### Restoring a Full Project (Full Project Commit)
 
