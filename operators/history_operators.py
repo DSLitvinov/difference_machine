@@ -531,6 +531,43 @@ class DF_OT_load_mesh_version(Operator):
             return {'CANCELLED'}
 
 
+class DF_OT_select_mesh_from_commit(Operator):
+    """Select mesh object by name in viewport."""
+    bl_idname = "df.select_mesh_from_commit"
+    bl_label = "Select Mesh"
+    bl_description = "Select mesh object in viewport"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    mesh_name: StringProperty(name="Mesh Name")
+
+    def execute(self, context):
+        """Execute the operator."""
+        if not self.mesh_name:
+            self.report({'ERROR'}, "Mesh name not specified")
+            return {'CANCELLED'}
+        
+        # Find object by name
+        if self.mesh_name not in bpy.data.objects:
+            self.report({'WARNING'}, f"Object '{self.mesh_name}' not found in scene")
+            return {'CANCELLED'}
+        
+        obj = bpy.data.objects[self.mesh_name]
+        
+        # Deselect all objects
+        bpy.ops.object.select_all(action='DESELECT')
+        
+        # Select and activate the object
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+        
+        # Frame selected object in viewport
+        if context.space_data and context.space_data.type == 'VIEW_3D':
+            bpy.ops.view3d.view_selected()
+        
+        self.report({'INFO'}, f"Selected: {self.mesh_name}")
+        return {'FINISHED'}
+
+
 class DF_OT_replace_mesh(Operator):
     """Replace current mesh with version from commit."""
     bl_idname = "df.replace_mesh"

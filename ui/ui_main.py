@@ -35,6 +35,7 @@ from ..operators.history_operators import (
     DF_OT_open_project_state,
     DF_OT_compare_project,
     DF_OT_switch_comparison_axis,
+    DF_OT_select_mesh_from_commit,
 )
 from ..operators.branch_operators import (
     DF_OT_sort_branches,
@@ -75,6 +76,7 @@ classes = [
     DF_OT_open_project_state,
     DF_OT_compare_project,
     DF_OT_switch_comparison_axis,
+    DF_OT_select_mesh_from_commit,
     # Branch operators
     DF_OT_sort_branches,
     # Export operators

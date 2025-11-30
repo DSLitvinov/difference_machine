@@ -411,22 +411,29 @@ class DF_PT_history_panel(Panel):
                                                     
                                                     if mesh and mesh.mesh_json:
                                                         mesh_box = mesh_info_box.box()
-                                                        row = mesh_box.row()
-                                                        row.label(text=f"Object: {mesh_name}", icon='MESH_DATA')
                                                         
                                                         # Get vertices and faces count
                                                         vertices = mesh.mesh_json.get('vertices', [])
                                                         faces = mesh.mesh_json.get('faces', [])
                                                         
+                                                        # Make the entire box clickable - first row with object name
                                                         row = mesh_box.row()
-                                                        row.label(text=f"Vertices: {len(vertices)}")
-                                                        row.label(text=f"Faces: {len(faces)}")
+                                                        op = row.operator("df.select_mesh_from_commit", text=f"Object: {mesh_name}", icon='MESH_DATA', emboss=False)
+                                                        op.mesh_name = mesh_name
+                                                        
+                                                        # Second row with vertices and faces (also clickable)
+                                                        row = mesh_box.row()
+                                                        op = row.operator("df.select_mesh_from_commit", text=f"Vertices: {len(vertices)}", emboss=False)
+                                                        op.mesh_name = mesh_name
+                                                        op = row.operator("df.select_mesh_from_commit", text=f"Faces: {len(faces)}", emboss=False)
+                                                        op.mesh_name = mesh_name
                         except Exception:
-                            # If we can't load mesh data, just show names
+                            # If we can't load mesh data, just show names (clickable)
                             for mesh_name in mesh_names:
                                 mesh_box = mesh_info_box.box()
                                 row = mesh_box.row()
-                                row.label(text=f"Object: {mesh_name}", icon='MESH_DATA')
+                                op = row.operator("df.select_mesh_from_commit", text=f"Object: {mesh_name}", icon='MESH_DATA', emboss=False)
+                                op.mesh_name = mesh_name
                     
                     # mesh_names уже определены выше при отображении информации о мешах
                     # Проверка: показываем кнопки только если выбранный объект есть в коммите
