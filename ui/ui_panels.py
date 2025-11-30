@@ -277,6 +277,7 @@ class DF_PT_branch_panel(Panel):
             box.label(text="Comparison mode active", icon='INFO')
             box.label(text="Only viewing is available")
 
+
 class DF_PT_history_panel(Panel):
     """Panel for viewing commit history."""
     bl_label = "Load Commit"

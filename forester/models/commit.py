@@ -23,7 +23,8 @@ class Commit:
                  mesh_hashes: Optional[List[str]] = None,
                  commit_type: str = "project",
                  selected_mesh_names: Optional[List[str]] = None,
-                 export_options: Optional[Dict[str, bool]] = None):
+                 export_options: Optional[Dict[str, bool]] = None,
+                 screenshot_hash: Optional[str] = None):
         """
         Initialize commit.
         
@@ -39,6 +40,7 @@ class Commit:
             commit_type: Type of commit ("project" or "mesh_only")
             selected_mesh_names: List of selected mesh names (for mesh_only commits)
             export_options: Export options dict (for mesh_only commits)
+            screenshot_hash: Hash of viewport screenshot blob (optional)
         """
         self.hash = hash
         self.parent_hash = parent_hash
@@ -51,6 +53,7 @@ class Commit:
         self.commit_type = commit_type
         self.selected_mesh_names = selected_mesh_names or []
         self.export_options = export_options or {}
+        self.screenshot_hash = screenshot_hash
     
     def compute_hash(self) -> str:
         """
@@ -76,6 +79,7 @@ class Commit:
         Returns:
             Dictionary representation
         """
+        screenshot_hash_str = self.screenshot_hash if self.screenshot_hash else ""
         return {
             "hash": self.hash,
             "parent_hash": self.parent_hash,
@@ -87,7 +91,8 @@ class Commit:
             "mesh_hashes": self.mesh_hashes,
             "commit_type": self.commit_type,
             "selected_mesh_names": self.selected_mesh_names,
-            "export_options": self.export_options
+            "export_options": self.export_options,
+            "screenshot_hash": screenshot_hash_str
         }
     
     @classmethod
@@ -101,6 +106,10 @@ class Commit:
         Returns:
             Commit instance
         """
+        screenshot_hash = data.get('screenshot_hash')
+        if screenshot_hash == "":
+            screenshot_hash = None
+        
         return cls(
             hash=data.get('hash', ''),
             parent_hash=data.get('parent_hash'),
@@ -112,7 +121,8 @@ class Commit:
             mesh_hashes=data.get('mesh_hashes', []),
             commit_type=data.get('commit_type', 'project'),
             selected_mesh_names=data.get('selected_mesh_names', []),
-            export_options=data.get('export_options', {})
+            export_options=data.get('export_options', {}),
+            screenshot_hash=screenshot_hash
         )
     
     def save_to_storage(self, db: ForesterDB, storage: ObjectStorage) -> None:
@@ -142,7 +152,8 @@ class Commit:
             author=self.author,
             commit_type=self.commit_type,
             selected_mesh_names=self.selected_mesh_names,
-            export_options=self.export_options
+            export_options=self.export_options,
+            screenshot_hash=self.screenshot_hash
         )
     
     @classmethod
@@ -176,6 +187,12 @@ class Commit:
                 selected_mesh_names = []
                 export_options = {}
             
+            screenshot_hash = commit_info.get('screenshot_hash')
+            if commit_data and 'screenshot_hash' in commit_data:
+                screenshot_hash = commit_data.get('screenshot_hash')
+            if screenshot_hash == "":
+                screenshot_hash = None
+            
             return cls(
                 hash=commit_info['hash'],
                 parent_hash=commit_info.get('parent_hash'),
@@ -187,7 +204,8 @@ class Commit:
                 mesh_hashes=mesh_hashes,
                 commit_type=commit_type,
                 selected_mesh_names=selected_mesh_names,
-                export_options=export_options
+                export_options=export_options,
+                screenshot_hash=screenshot_hash
             )
         
         # Try to load from storage
@@ -201,7 +219,8 @@ class Commit:
     def create(cls, tree: Tree, branch: str, message: str, author: str,
                parent_hash: Optional[str] = None, mesh_hashes: Optional[List[str]] = None,
                commit_type: str = "project", selected_mesh_names: Optional[List[str]] = None,
-               export_options: Optional[Dict[str, bool]] = None) -> 'Commit':
+               export_options: Optional[Dict[str, bool]] = None,
+               screenshot_hash: Optional[str] = None) -> 'Commit':
         """
         Create a new commit.
         
@@ -215,6 +234,7 @@ class Commit:
             commit_type: Type of commit ("project" or "mesh_only")
             selected_mesh_names: List of selected mesh names (for mesh_only)
             export_options: Export options dict (for mesh_only)
+            screenshot_hash: Hash of viewport screenshot blob (optional)
             
         Returns:
             Commit instance
@@ -232,7 +252,8 @@ class Commit:
             mesh_hashes=mesh_hashes or [],
             commit_type=commit_type,
             selected_mesh_names=selected_mesh_names or [],
-            export_options=export_options or {}
+            export_options=export_options or {},
+            screenshot_hash=screenshot_hash
         )
         
         commit.hash = commit.compute_hash()
