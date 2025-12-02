@@ -18,17 +18,7 @@ priority: 4
   - `(True, None)` - Success
   - `(False, "error message")` - Failure with message
 
-## Repository Operations
-- Check repository existence before operations
-- Raise `ValueError` if repository required but not found
-- Return `None` or empty list for graceful failures when appropriate
-
-## Database Operations
-- Use context managers: `with ForesterDB(db_path) as db:`
-- Handle `sqlite3.OperationalError` for database-specific errors
-- Always commit after write operations
-
-## File Operations
+## File Operations (General)
 - Check `path.exists()` before file operations
 - Handle `OSError`, `PermissionError`, `ValueError` appropriately
 - Log all file operation errors with context

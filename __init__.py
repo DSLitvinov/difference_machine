@@ -17,6 +17,8 @@ from .properties import properties
 from . import preferences
 from .utils.logging_config import setup_logging
 
+logger = logging.getLogger(__name__)
+
 def register():
     # Setup logging
     setup_logging(log_level=logging.INFO)

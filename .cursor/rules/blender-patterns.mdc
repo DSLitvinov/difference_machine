@@ -1,0 +1,75 @@
+---
+description: Blender-Specific Patterns and Best Practices
+globs: ["**/*.py"]
+alwaysApply: true
+priority: 4
+---
+
+# Blender-Specific Patterns
+
+## Addon Registration and UI Updates
+
+### Register Function Pattern
+- Always register in order: `preferences.register()` → `properties.register()` → `ui_main.register()`
+- **NEVER call `bpy.ops` operators directly in `register()`** - they require valid context
+- Use `bpy.app.timers.register()` for deferred UI updates after registration
+
+### UI Updates on Addon Start
+- **NEVER call `bpy.ops` directly in `register()`** - context may be invalid
+- UI updates should be handled by panels' `draw()` methods or user-initiated refresh buttons
+- Panels can auto-refresh empty lists in their `draw()` methods if needed
+- If UI updates are needed on addon start, use `bpy.app.timers.register()` with direct function calls (not operators)
+
+### Operators (operators/)
+- Inherit from `bpy.types.Operator`
+- Use `bl_idname`, `bl_label`, `bl_description` properties
+- Access context: `context.scene`, `context.object`
+- Report errors: `self.report({'ERROR'}, "message")`
+
+### UI Panels (ui/)
+- Inherit from `bpy.types.Panel`
+- Use `bl_idname`, `bl_label`, `bl_space_type`, `bl_region_type`
+- Use `@classmethod poll(cls, context)` to control visibility
+
+### Properties (properties/)
+- Use `bpy.types.PropertyGroup` for complex properties
+- Register in `register()` function
+- Use `bpy.props` for property definitions
+
+## File Path Handling
+
+### Blender File Paths
+- Use `bpy.data.filepath` to get current blend file path
+- Check `if bpy.data.filepath:` before using path
+- Use `bpy.path.abspath()` to resolve relative paths
+- Use `Path(bpy.data.filepath)` for pathlib operations
+
+### Repository Detection
+- Pattern: `repo_path = find_repository(blend_file.parent)`
+- Check repository existence before operations
+- Initialize repository if needed: `init_repository(project_root)`
+
+## Context Handling
+
+### Safe Context Access
+- Always check if context is available: `if bpy.context.scene:`
+- Use `bpy.context.temp_override()` for operator context override
+- Never assume context exists during `register()` or `unregister()`
+
+### Operator Context
+- Operators receive `context` parameter in `execute(self, context)`
+- Use `context.scene` for scene properties
+- Use `context.active_object` for selected objects
+- Use `context.selected_objects` for multiple selections
+
+## Error Handling in Blender
+
+### Operator Errors
+- Use `self.report({'ERROR'}, "message")` for user-visible errors
+- Return `{'CANCELLED'}` on error
+- Return `{'FINISHED'}` on success
+- Log errors with `logger.error(..., exc_info=True)`
+
+### Silent Failures
+- Use `try/except` with `pass` for non-critical operations
+- Example: Cleanup operations that shouldn't break addon load

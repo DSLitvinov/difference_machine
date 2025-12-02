@@ -17,23 +17,31 @@ forester/
 └── api.py         # Public Python API for automation
 ```
 
-## Database Operations (forester/core/database.py)
-- Always use context manager: `with ForesterDB(db_path) as db:`
-- Use `_unsafe` suffix for internal methods that assume connection exists
-- Always call `self.conn.commit()` after write operations
-- Use `exc_info=True` in exception handlers
-
 ## Repository Path Resolution
 - Use helper functions from `api.py`: `_get_repo_path()` or `_get_repo_path_or_none()`
 - Pattern: `repo_path = find_repository(path) if not (path / ".DFM").exists() else path`
 - Check for repository existence before operations
 - Raise `ValueError` if repository required but not found
 
+## Repository Operations
+- Check repository existence before operations
+- Raise `ValueError` if repository required but not found
+- Return `None` or empty list for graceful failures when appropriate
+
+## Database Operations (forester/core/database.py)
+- Always use context manager: `with ForesterDB(db_path) as db:`
+- Use `_unsafe` suffix for internal methods that assume connection exists
+- Always call `self.conn.commit()` after write operations
+- Use `exc_info=True` in exception handlers
+- Handle `sqlite3.OperationalError` for database-specific errors
+
 ## File Operations
 - Use `pathlib.Path` instead of `os.path`
 - Check `path.exists()` before operations
 - Use `relative_to()` for path manipulation
 - Always handle `ValueError` from `relative_to()`
+- Handle `OSError`, `PermissionError`, `ValueError` appropriately
+- Log all file operation errors with context
 
 ## Data Models
 - All models have `.hash` property (SHA-256)
