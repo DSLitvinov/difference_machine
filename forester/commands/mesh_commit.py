@@ -6,7 +6,7 @@ Creates commits only for selected meshes.
 import json
 import logging
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 from ..core.database import ForesterDB
 from ..core.ignore import IgnoreRules
 from ..core.storage import ObjectStorage
@@ -18,6 +18,63 @@ from ..models.blob import Blob
 from ..core.hashing import compute_hash
 
 logger = logging.getLogger(__name__)
+
+# Global registry for material update hooks
+# Plugins can register functions to update material_json after texture processing
+_material_update_hooks: List[Callable[[Dict[str, Any], List[Dict[str, Any]]], Dict[str, Any]]] = []
+
+
+def register_material_update_hook(hook_func: Callable[[Dict[str, Any], List[Dict[str, Any]]], Dict[str, Any]]) -> None:
+    """
+    Register a hook function to update material_json after texture processing.
+    
+    This allows plugins (Blender, Cinema 4D, etc.) to update their application-specific
+    material structures with texture paths after Forester processes textures.
+    
+    Args:
+        hook_func: Function that takes (material_json, texture_info_list) and returns updated material_json
+                   Signature: def hook(material_json: Dict, textures: List[Dict]) -> Dict
+    """
+    if hook_func not in _material_update_hooks:
+        _material_update_hooks.append(hook_func)
+        logger.debug(f"Registered material update hook: {hook_func.__name__}")
+
+
+def unregister_material_update_hook(hook_func: Callable[[Dict[str, Any], List[Dict[str, Any]]], Dict[str, Any]]) -> None:
+    """
+    Unregister a material update hook.
+    
+    Args:
+        hook_func: Hook function to unregister
+    """
+    if hook_func in _material_update_hooks:
+        _material_update_hooks.remove(hook_func)
+        logger.debug(f"Unregistered material update hook: {hook_func.__name__}")
+
+
+def _apply_material_update_hooks(material_json: Dict[str, Any], textures: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Apply all registered hooks to update material_json.
+    
+    Args:
+        material_json: Material JSON dict
+        textures: List of processed texture info dicts
+        
+    Returns:
+        Updated material_json
+    """
+    if not _material_update_hooks:
+        return material_json
+    
+    updated_material_json = material_json.copy()
+    
+    for hook in _material_update_hooks:
+        try:
+            updated_material_json = hook(updated_material_json, textures)
+        except Exception as e:
+            logger.warning(f"Material update hook '{hook.__name__}' failed: {e}", exc_info=True)
+    
+    return updated_material_json
 
 
 def create_mesh_only_commit(
@@ -34,15 +91,21 @@ def create_mesh_only_commit(
     Args:
         repo_path: Path to repository root
         mesh_data_list: List of mesh data dicts with keys:
-            - mesh_name: str (name from Blender)
+            - mesh_name: str (object name from source application)
             - mesh_json: dict (mesh data)
             - material_json: dict (material data)
         export_options: Export options dict (vertices, faces, uv, normals, materials)
         message: Commit message
         author: Author name
+        screenshot_hash: Optional screenshot blob hash
 
     Returns:
         Commit hash if successful, None otherwise
+        
+    Note:
+        Material update hooks registered via register_material_update_hook()
+        will be called to update application-specific material structures
+        after texture processing.
     """
     dfm_dir = repo_path / ".DFM"
     if not dfm_dir.exists():
@@ -194,31 +257,12 @@ def create_mesh_only_commit(
                             # Remove temporary flag
                             texture_info.pop('needs_copy', None)
 
-                    # Update node_data for TEX_IMAGE nodes with texture info (like in difference_engine)
-                    if 'node_tree' in material_json and 'nodes' in material_json['node_tree']:
-                        # Build texture lookup by node_name
-                        texture_by_node = {}
-                        for tex_info in material_json['textures']:
-                            node_name = tex_info.get('node_name')
-                            if node_name:
-                                texture_by_node[node_name] = tex_info
-
-                        # Update TEX_IMAGE node_data with texture paths
-                        for node_data in material_json['node_tree']['nodes']:
-                            if node_data.get('type') == 'TEX_IMAGE':
-                                node_name = node_data.get('name')
-                                texture_info = texture_by_node.get(node_name)
-
-                                if texture_info:
-                                    # Add copied_texture and image_file to node_data (like in difference_engine)
-                                    if texture_info.get('copied') and texture_info.get('commit_path'):
-                                        # Save only filename (remove "textures/" prefix if present)
-                                        commit_path = texture_info['commit_path']
-                                        if commit_path.startswith('textures/'):
-                                            commit_path = commit_path.replace('textures/', '', 1)
-                                        node_data['copied_texture'] = commit_path
-                                    if texture_info.get('original_path'):
-                                        node_data['image_file'] = texture_info['original_path']
+                    # Apply material update hooks (plugins can update their material structures)
+                    if material_json and 'textures' in material_json:
+                        material_json = _apply_material_update_hooks(
+                            material_json,
+                            material_json['textures']
+                        )
 
                     # Update material.json with final texture info
                     mesh_storage_data['material_json'] = material_json
@@ -312,35 +356,18 @@ def create_mesh_only_commit(
                             if existing_tex.get('original_path'):
                                 texture_info['original_path'] = existing_tex['original_path']
 
-                # Update node_data for TEX_IMAGE nodes if textures are present
-                if existing_material_json and 'textures' in material_json and 'node_tree' in existing_material_json and 'nodes' in existing_material_json['node_tree']:
-                        # Build texture lookup by node_name
-                        texture_by_node = {}
-                        for tex_info in material_json['textures']:
-                            node_name = tex_info.get('node_name')
-                            if node_name:
-                                texture_by_node[node_name] = tex_info
-
-                        # Update TEX_IMAGE node_data with texture paths
-                        for node_data in existing_material_json['node_tree']['nodes']:
-                            if node_data.get('type') == 'TEX_IMAGE':
-                                node_name = node_data.get('name')
-                                texture_info = texture_by_node.get(node_name)
-
-                                if texture_info:
-                                    # Add copied_texture and image_file to node_data (like in difference_engine)
-                                    if texture_info.get('copied') and texture_info.get('commit_path'):
-                                        # Save only filename (remove "textures/" prefix if present)
-                                        commit_path = texture_info['commit_path']
-                                        if commit_path.startswith('textures/'):
-                                            commit_path = commit_path.replace('textures/', '', 1)
-                                        node_data['copied_texture'] = commit_path
-                                    if texture_info.get('original_path'):
-                                        node_data['image_file'] = texture_info['original_path']
-
-                        # Save updated material.json
+                # Apply material update hooks for existing meshes
+                if existing_material_json and 'textures' in material_json:
+                    # Apply hooks to update existing material_json with new texture paths
+                    updated_material_json = _apply_material_update_hooks(
+                        existing_material_json,
+                        material_json['textures']
+                    )
+                    
+                    # Save updated material.json if it was modified
+                    if updated_material_json != existing_material_json:
                         with open(material_json_path, 'w', encoding='utf-8') as f:
-                            json.dump(existing_material_json, f, indent=2, ensure_ascii=False)
+                            json.dump(updated_material_json, f, indent=2, ensure_ascii=False)
 
             mesh_hashes.append(mesh_hash)
             selected_mesh_names.append(mesh_name)

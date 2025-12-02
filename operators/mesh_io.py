@@ -969,3 +969,50 @@ def load_textures_to_material(material, textures_info, mesh_storage_path):
             else:
                 logger.warning(f"No texture path found for node {node_name}")
 
+
+# ========== MATERIAL UPDATE HOOK FOR FORESTER ==========
+
+def update_blender_node_tree(material_json: Dict[str, Any], textures: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Update Blender node_tree with texture paths.
+    
+    This function is registered as a hook in Forester to update Blender-specific
+    material structures (node_tree) with texture paths after Forester processes textures.
+    
+    Args:
+        material_json: Material JSON dict (may contain node_tree)
+        textures: List of processed texture info dicts with commit_path and original_path
+        
+    Returns:
+        Updated material_json with texture paths in node_tree nodes
+    """
+    # Only process if node_tree exists (Blender-specific structure)
+    if 'node_tree' not in material_json or 'nodes' not in material_json['node_tree']:
+        return material_json
+    
+    # Build texture lookup by node_name
+    texture_by_node = {}
+    for tex_info in textures:
+        node_name = tex_info.get('node_name')
+        if node_name:
+            texture_by_node[node_name] = tex_info
+    
+    # Update TEX_IMAGE node_data with texture paths
+    for node_data in material_json['node_tree']['nodes']:
+        if node_data.get('type') == 'TEX_IMAGE':
+            node_name = node_data.get('name')
+            texture_info = texture_by_node.get(node_name)
+            
+            if texture_info:
+                # Add copied_texture and image_file to node_data
+                if texture_info.get('copied') and texture_info.get('commit_path'):
+                    # Save only filename (remove "textures/" prefix if present)
+                    commit_path = texture_info['commit_path']
+                    if commit_path.startswith('textures/'):
+                        commit_path = commit_path.replace('textures/', '', 1)
+                    node_data['copied_texture'] = commit_path
+                if texture_info.get('original_path'):
+                    node_data['image_file'] = texture_info['original_path']
+    
+    return material_json
+

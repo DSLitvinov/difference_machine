@@ -26,6 +26,8 @@ from .stash import (
 from .mesh_commit import (
     create_mesh_only_commit,
     auto_compress_mesh_commits,
+    register_material_update_hook,
+    unregister_material_update_hook,
 )
 from .delete_commit import (
     delete_commit,
@@ -90,6 +92,8 @@ __all__ = [
     "delete_stash",
     "create_mesh_only_commit",
     "auto_compress_mesh_commits",
+    "register_material_update_hook",
+    "unregister_material_update_hook",
     "delete_commit",
     "rebuild_database",
     "garbage_collect",

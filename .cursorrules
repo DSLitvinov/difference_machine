@@ -157,6 +157,24 @@ with ForesterDB(db_path) as db:
 - Trees: Build from directory, then save
 - Meshes: Separate handling in `meshes/` directory
 
+### Checkout and Comparison Operations
+- **Texture Loading**: When restoring meshes for project comparison or mesh-only commits, textures MUST always be copied from storage to the working directory
+- **Path Updates**: After copying textures, update paths in `material.json` and `node_tree` to point to textures in the working directory (not storage)
+- **Pattern**: 
+  ```python
+  # 1. Copy textures from storage to working directory
+  storage_textures_dir = hash_to_path(mesh_hash, base_dir, "meshes") / "textures"
+  working_textures_dir = mesh_dir / "textures"
+  # Copy texture files...
+  
+  # 2. Update material_json paths
+  texture_info['commit_path'] = f"textures/{texture_filename}"
+  
+  # 3. Update node_tree paths if present
+  node_data['copied_texture'] = texture_filename
+  ```
+- **Critical**: Textures must be accessible in the working directory for Blender to load them when opening .blend files from temporary directories
+
 ## Blender-Specific Patterns
 
 ### Operators (operators/)

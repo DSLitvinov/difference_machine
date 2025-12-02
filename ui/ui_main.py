@@ -43,6 +43,8 @@ from ..operators.branch_operators import (
 from ..operators.export_operators import (
     DF_OT_toggle_export_component,
 )
+from ..operators.mesh_io import update_blender_node_tree
+from ..forester.commands.mesh_commit import register_material_update_hook, unregister_material_update_hook
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,10 @@ def register():
         # Register UI classes
         for cls in classes:
             bpy.utils.register_class(cls)
+        
+        # Register material update hook for Blender node_tree
+        register_material_update_hook(update_blender_node_tree)
+        logger.debug("Registered Blender material update hook")
     except Exception as e:
         logger.error(f"Error registering UI classes: {e}", exc_info=True)
         raise
@@ -97,6 +103,13 @@ def register():
 
 def unregister():
     try:
+        # Unregister material update hook
+        try:
+            unregister_material_update_hook(update_blender_node_tree)
+            logger.debug("Unregistered Blender material update hook")
+        except Exception as e:
+            logger.warning(f"Error unregistering material update hook: {e}", exc_info=True)
+        
         # Unregister UI classes
         for cls in reversed(classes):
             bpy.utils.unregister_class(cls)
