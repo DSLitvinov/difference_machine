@@ -19,7 +19,13 @@ from .mesh_io import (
     import_mesh_to_blender,
     import_node_tree_structure,
 )
-from .operator_helpers import get_repository_path, get_active_mesh_object, cleanup_old_preview_temp
+from .operator_helpers import (
+    get_repository_path,
+    get_active_mesh_object,
+    cleanup_old_preview_temp,
+    cleanup_old_compare_temp,
+    copy_project_textures_for_compare,
+)
 
 logger = logging.getLogger(__name__)
 class DF_OT_select_commit(Operator):
@@ -321,6 +327,12 @@ class DF_OT_compare_project(Operator):
         if temp_working_dir.exists():
             shutil.rmtree(temp_working_dir)
         temp_working_dir.mkdir(parents=True)
+
+        # Clean up other old compare_temp directories (keep current one)
+        try:
+            cleanup_old_compare_temp(repo_path, keep_current=str(temp_working_dir))
+        except Exception as e:
+            logger.warning(f"Failed to clean up old compare_temp directories: {e}", exc_info=True)
         
         # Step 1: Restore commit to temporary directory
         try:
@@ -349,8 +361,17 @@ class DF_OT_compare_project(Operator):
                 
                 # Restore files from tree to temp directory
                 restore_files_from_tree(tree, temp_working_dir, storage, db)
-                
-                # Restore meshes from commit
+
+                # Copy project textures from original project root into compare_temp
+                # This makes textures available when .blend is opened from compare_temp,
+                # even if some blobs were missing in the commit.
+                try:
+                    project_root = blend_file.parent
+                    copy_project_textures_for_compare(project_root, temp_working_dir)
+                except Exception as e:
+                    logger.warning(f"Failed to copy project textures for compare: {e}", exc_info=True)
+
+                # Restore meshes from commit (mesh-only data, if present)
                 restore_meshes_from_commit(commit, temp_working_dir, storage, dfm_dir)
                 
             finally:

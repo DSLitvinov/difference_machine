@@ -6,7 +6,7 @@ import bpy
 import logging
 import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Set
 from ..forester.commands import find_repository, list_branches, init_repository
 from ..forester.core.refs import get_branch_ref, get_current_branch
 from ..forester.core.database import ForesterDB
@@ -92,6 +92,117 @@ def cleanup_old_preview_temp(repo_path: Path, keep_current: Optional[str] = None
     
     except Exception as e:
         logger.warning(f"Failed to clean up preview_temp directories: {e}", exc_info=True)
+
+
+def cleanup_old_compare_temp(repo_path: Path, keep_current: Optional[str] = None) -> None:
+    """
+    Clean up old compare_temp directories, optionally keeping a specific one.
+
+    This prevents accumulation of stale compare commits under .DFM/compare_temp.
+
+    Args:
+        repo_path: Path to repository root
+        keep_current: Optional path to current compare directory to keep (as string)
+    """
+    import shutil
+
+    dfm_dir = repo_path / ".DFM"
+    if not dfm_dir.exists():
+        return
+
+    temp_dir = dfm_dir / "compare_temp"
+    if not temp_dir.exists():
+        return
+
+    try:
+        keep_path = None
+        if keep_current:
+            keep_path = Path(keep_current)
+            if not keep_path.exists():
+                keep_path = None
+
+        removed_count = 0
+        total_size = 0
+
+        for item in temp_dir.iterdir():
+            if not item.is_dir():
+                continue
+
+            if keep_path and item.resolve() == keep_path.resolve():
+                continue
+
+            try:
+                size = sum(f.stat().st_size for f in item.rglob("*") if f.is_file())
+                shutil.rmtree(item)
+                removed_count += 1
+                total_size += size
+                logger.debug(
+                    f"Removed old compare_temp directory: {item.name} ({size / (1024 * 1024):.1f} MB)"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to remove compare_temp directory {item.name}: {e}")
+
+        if removed_count > 0:
+            logger.info(
+                f"Cleaned up {removed_count} old compare_temp directories "
+                f"({total_size / (1024 * 1024):.1f} MB freed)"
+            )
+    except Exception as e:
+        logger.warning("Failed to clean up compare_temp directories: %s", e, exc_info=True)
+
+
+def copy_project_textures_for_compare(source_root: Path, compare_root: Path) -> None:
+    """
+    Copy texture files from project root to compare_temp for project comparison.
+
+    This ensures that when .blend is opened from compare_temp, image textures
+    that lived alongside the original .blend (or in its subfolders) are available.
+
+    Args:
+        source_root: Original project root (typically the directory with the .blend file)
+        compare_root: Root of compare_temp for this commit (compare_temp/commit_xxx)
+    """
+    import shutil
+
+    if not source_root.exists():
+        return
+
+    # Common image extensions used for textures
+    texture_extensions: Set[str] = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".tga",
+        ".tif",
+        ".tiff",
+        ".bmp",
+        ".exr",
+        ".hdr",
+        ".dds",
+        ".webp",
+    }
+
+    for path in source_root.rglob("*"):
+        if not path.is_file():
+            continue
+
+        if path.suffix.lower() not in texture_extensions:
+            continue
+
+        try:
+            rel_path = path.relative_to(source_root)
+        except ValueError:
+            # Should not happen, but be safe
+            rel_path = path.name
+
+        dest_path = compare_root / rel_path
+        try:
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            if not dest_path.exists():
+                shutil.copy2(path, dest_path)
+                logger.debug(f"Copied project texture for compare: {path} -> {dest_path}")
+        except Exception as e:
+            logger.warning(f"Failed to copy project texture {path}: {e}", exc_info=True)
 
 
 def check_and_run_garbage_collect(context, repo_path: Path) -> None:
