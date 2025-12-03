@@ -22,6 +22,7 @@ from ..forester.commands import (
     switch_branch,
     delete_branch,
 )
+from ..forester.commands.tag import create_tag
 from ..forester.core.refs import get_branch_ref, get_current_branch
 from ..forester.core.database import ForesterDB
 from .mesh_io import export_mesh_to_json
@@ -103,8 +104,22 @@ class DF_OT_create_project_commit(Operator):
             if commit_hash:
                 self.report({'INFO'}, f"Commit created: {commit_hash[:16]}...")
                 
-                # Clear message field after successful commit
+                # Set tag if provided
+                tag_name = props.commit_tag.strip() if props.commit_tag else None
+                if tag_name:
+                    try:
+                        create_tag(repo_path, tag_name, commit_hash=commit_hash)
+                        self.report({'INFO'}, f"Tag '{tag_name}' created")
+                    except ValueError as e:
+                        # Tag might already exist, report warning but don't fail
+                        self.report({'WARNING'}, f"Tag not set: {str(e)}")
+                    except Exception as e:
+                        logger.warning(f"Failed to set tag: {e}", exc_info=True)
+                        self.report({'WARNING'}, f"Failed to set tag: {str(e)}")
+                
+                # Clear message and tag fields after successful commit
                 props.message = ""
+                props.commit_tag = ""
                 
                 # Check and run automatic garbage collection if enabled
                 from .operator_helpers import check_and_run_garbage_collect
@@ -267,8 +282,22 @@ class DF_OT_create_mesh_commit(Operator):
             if commit_hash:
                 self.report({'INFO'}, f"Mesh commit created: {commit_hash[:16]}...")
                 
-                # Clear message field after successful commit
+                # Set tag if provided
+                tag_name = props.commit_tag.strip() if props.commit_tag else None
+                if tag_name:
+                    try:
+                        create_tag(repo_path, tag_name, commit_hash=commit_hash)
+                        self.report({'INFO'}, f"Tag '{tag_name}' created")
+                    except ValueError as e:
+                        # Tag might already exist, report warning but don't fail
+                        self.report({'WARNING'}, f"Tag not set: {str(e)}")
+                    except Exception as e:
+                        logger.warning(f"Failed to set tag: {e}", exc_info=True)
+                        self.report({'WARNING'}, f"Failed to set tag: {str(e)}")
+                
+                # Clear message and tag fields after successful commit
                 props.message = ""
+                props.commit_tag = ""
                 
                 # Auto-compress if enabled (use preference setting)
                 if prefs.auto_compress:
@@ -326,9 +355,13 @@ class DF_OT_refresh_history(Operator):
         if not branch_name:
             branch_name = "main"  # Fallback
         
-        # Get commits from database for current branch
+        # Get tag filter from properties
+        props = context.scene.df_commit_props
+        tag_filter = props.tag_search_filter.strip() if props.tag_search_filter else None
+        
+        # Get commits from database for current branch (with optional tag filter)
         try:
-            commits_data = get_branch_commits(repo_path, branch_name)
+            commits_data = get_branch_commits(repo_path, branch_name, tag_filter=tag_filter)
             
             # Clear existing list
             context.scene.df_commits.clear()
@@ -341,6 +374,9 @@ class DF_OT_refresh_history(Operator):
                 commit_item.author = commit_data.get('author', 'Unknown')
                 commit_item.timestamp = commit_data['timestamp']
                 commit_item.commit_type = commit_data.get('commit_type', 'project')
+                
+                # Add tag
+                commit_item.tag = commit_data.get('tag', '') or ''
                 
                 # Format selected mesh names
                 selected_names = commit_data.get('selected_mesh_names', [])
@@ -357,7 +393,8 @@ class DF_OT_refresh_history(Operator):
                 screenshot_hash_val = commit_data.get('screenshot_hash')
                 commit_item.screenshot_hash = screenshot_hash_val if screenshot_hash_val else ''
             
-            self.report({'INFO'}, f"Loaded {len(commits_data)} commits from branch '{branch_name}'")
+            filter_msg = f" (filtered by tag: '{tag_filter}')" if tag_filter else ""
+            self.report({'INFO'}, f"Loaded {len(commits_data)} commits from branch '{branch_name}'{filter_msg}")
             return {'FINISHED'}
         except (ValueError, FileNotFoundError) as e:
             self.report({'ERROR'}, f"Failed to load commits: {str(e)}")
@@ -367,6 +404,24 @@ class DF_OT_refresh_history(Operator):
             self.report({'ERROR'}, f"Failed to load commits: {str(e)}")
             logger.error(f"Unexpected error loading commits: {e}", exc_info=True)
             return {'CANCELLED'}
+
+
+class DF_OT_clear_tag_filter(Operator):
+    """Clear tag search filter."""
+    bl_idname = "df.clear_tag_filter"
+    bl_label = "Clear Tag Filter"
+    bl_description = "Clear the tag search filter and show all commits"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        """Execute the operator."""
+        props = context.scene.df_commit_props
+        props.tag_search_filter = ""
+        
+        # Refresh history to show all commits
+        bpy.ops.df.refresh_history()
+        
+        return {'FINISHED'}
 
 
 class DF_OT_refresh_branches(Operator):

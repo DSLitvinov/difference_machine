@@ -16,6 +16,7 @@ class DFCommitItem(bpy.types.PropertyGroup):
     commit_type: StringProperty(name="Type", default="project")
     selected_mesh_names: StringProperty(name="Mesh Names")  # JSON string
     screenshot_hash: StringProperty(name="Screenshot Hash")
+    tag: StringProperty(name="Tag", default="")
     is_selected: BoolProperty(name="Selected", default=False)
 
 

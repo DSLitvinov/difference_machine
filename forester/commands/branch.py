@@ -162,13 +162,14 @@ def delete_branch(repo_path: Path, branch_name: str, force: bool = False) -> boo
     return True
 
 
-def get_branch_commits(repo_path: Path, branch_name: str) -> List[Dict[str, Any]]:
+def get_branch_commits(repo_path: Path, branch_name: str, tag_filter: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Get all commits in a branch.
+    Get all commits in a branch, optionally filtered by tag.
 
     Args:
         repo_path: Path to repository root
         branch_name: Name of branch
+        tag_filter: Optional tag name to filter by (None = all commits)
 
     Returns:
         List of commit dictionaries, ordered from oldest to newest
@@ -179,8 +180,8 @@ def get_branch_commits(repo_path: Path, branch_name: str) -> List[Dict[str, Any]
 
     db_path = dfm_dir / "forester.db"
     with ForesterDB(db_path) as db:
-        commits = db.get_commits_by_branch(branch_name)
-        return [dict(c) for c in commits]
+        commits = db.get_commits_by_branch(branch_name, tag_filter=tag_filter)
+        return commits
 
 
 def switch_branch(repo_path: Path, branch_name: str) -> bool:

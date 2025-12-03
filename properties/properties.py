@@ -40,6 +40,13 @@ class DFCommitProperties(bpy.types.PropertyGroup):
         default="",
     )
     
+    # Commit tag
+    commit_tag: StringProperty(
+        name="Tag",
+        description="Optional tag for this commit",
+        default="",
+    )
+    
     # Author
     author: StringProperty(
         name="Author",
@@ -131,6 +138,28 @@ class DFCommitProperties(bpy.types.PropertyGroup):
         description="Filter branches by name",
         default="",
         options={'TEXTEDIT_UPDATE'},
+    )
+    
+    def update_tag_filter(self, context):
+        """Update callback for tag search filter - refreshes commit list."""
+        # Auto-refresh history when filter changes
+        # Use timer to avoid context issues during property update
+        def refresh_after_update():
+            try:
+                bpy.ops.df.refresh_history()
+            except:
+                pass  # Silently fail if can't refresh
+        
+        # Schedule refresh for next frame
+        bpy.app.timers.register(refresh_after_update, first_interval=0.1)
+    
+    # Tag search filter
+    tag_search_filter: StringProperty(
+        name="Tag Search",
+        description="Filter commits by tag name",
+        default="",
+        options={'TEXTEDIT_UPDATE'},
+        update=update_tag_filter,
     )
     
     def get_export_options(self) -> dict:

@@ -64,9 +64,12 @@ class DF_UL_commit_list(UIList):
             # Format message (truncate if too long to fit in UI)
             message_text = item.message[:30] + "..." if len(item.message) > 30 else item.message
             
-            # Build full text: message + author + date time
-            # Format: "Message | Author | Date Time"
-            full_text = f"{message_text} | {item.author} | {date_str}"
+            # Add tag to display if present
+            tag_text = f" [{item.tag}]" if item.tag else ""
+            
+            # Build full text: message + tag + author + date time
+            # Format: "Message [Tag] | Author | Date Time"
+            full_text = f"{message_text}{tag_text} | {item.author} | {date_str}"
             
             # Commit type indicator
             if item.commit_type == "mesh_only":

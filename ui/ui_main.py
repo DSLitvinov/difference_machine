@@ -24,6 +24,7 @@ from ..operators.commit_operators import (
     DF_OT_init_project,
     DF_OT_rebuild_database,
     DF_OT_garbage_collect,
+    DF_OT_clear_tag_filter,
 )
 from ..operators.history_operators import (
     DF_OT_select_commit,
@@ -68,6 +69,7 @@ classes = [
     DF_OT_init_project,
     DF_OT_rebuild_database,
     DF_OT_garbage_collect,
+    DF_OT_clear_tag_filter,
     # History operators
     DF_OT_select_commit,
     DF_OT_checkout_commit,

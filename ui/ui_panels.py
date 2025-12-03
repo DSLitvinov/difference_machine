@@ -147,6 +147,9 @@ class DF_PT_commit_panel(Panel):
         # Message
         layout.prop(props, "message", text="Message")
         
+        # Tag (optional)
+        layout.prop(props, "commit_tag", text="Tag", icon='BOOKMARKS')
+        
         # Create commit button (no error messages, no disabled states)
         layout.separator()
         
@@ -310,8 +313,21 @@ class DF_PT_history_panel(Panel):
         row = layout.row()
         row.operator("df.refresh_history", icon='FILE_REFRESH')
         
-        # Branch (display as text)
+        # Tag search filter
         props = context.scene.df_commit_props
+        layout.separator()
+        box = layout.box()
+        row = box.row()
+        row.label(text="Search by Tag:", icon='VIEWZOOM')
+        row = box.row()
+        row.prop(props, "tag_search_filter", text="", icon='BOOKMARKS')
+        if props.tag_search_filter:
+            # Clear filter button
+            row = box.row()
+            op = row.operator("df.clear_tag_filter", text="Clear Filter", icon='X')
+        
+        # Branch (display as text)
+        layout.separator()
         row = layout.row()
         row.label(text="Branch:")
         current_branch = get_current_branch_name(context)

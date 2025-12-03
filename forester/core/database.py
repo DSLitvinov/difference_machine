@@ -407,19 +407,64 @@ class ForesterDB:
             return dict(row)
         return None
 
-    def get_commits_by_branch(self, branch: str) -> List[Dict[str, Any]]:
-        """Get all commits in branch."""
+    def get_commits_by_branch(self, branch: str, tag_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Get all commits in branch, optionally filtered by tag.
+
+        Args:
+            branch: Branch name
+            tag_filter: Optional tag name to filter by (None = all commits)
+
+        Returns:
+            List of commit dictionaries
+        """
         if self.conn is None:
             self.connect()
 
         cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT * FROM commits
-            WHERE branch = ?
-            ORDER BY timestamp ASC
-        """, (branch,))
+        
+        if tag_filter:
+            # Filter by branch and tag
+            cursor.execute("""
+                SELECT * FROM commits
+                WHERE branch = ? AND tag = ?
+                ORDER BY timestamp ASC
+            """, (branch, tag_filter))
+        else:
+            # Get all commits in branch
+            cursor.execute("""
+                SELECT * FROM commits
+                WHERE branch = ?
+                ORDER BY timestamp ASC
+            """, (branch,))
 
-        return [dict(row) for row in cursor.fetchall()]
+        results = []
+        for row in cursor.fetchall():
+            result = dict(row)
+            # Parse JSON fields
+            if result.get('selected_mesh_names'):
+                try:
+                    result['selected_mesh_names'] = json.loads(result['selected_mesh_names'])
+                except (json.JSONDecodeError, TypeError):
+                    result['selected_mesh_names'] = []
+            else:
+                result['selected_mesh_names'] = []
+
+            if result.get('export_options'):
+                try:
+                    result['export_options'] = json.loads(result['export_options'])
+                except (json.JSONDecodeError, TypeError):
+                    result['export_options'] = {}
+            else:
+                result['export_options'] = {}
+
+            # Set default commit_type if not present
+            if 'commit_type' not in result or not result['commit_type']:
+                result['commit_type'] = 'project'
+
+            results.append(result)
+
+        return results
 
     def delete_commit(self, commit_hash: str) -> None:
         """Delete commit from database."""
