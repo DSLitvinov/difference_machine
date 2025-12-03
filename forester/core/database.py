@@ -430,6 +430,99 @@ class ForesterDB:
         cursor.execute("DELETE FROM commits WHERE hash = ?", (commit_hash,))
         self.conn.commit()
 
+    def set_commit_tag(self, commit_hash: str, tag_name: Optional[str]) -> None:
+        """
+        Set tag for a commit.
+
+        Args:
+            commit_hash: Commit hash
+            tag_name: Tag name (None to remove tag)
+        """
+        if self.conn is None:
+            self.connect()
+
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE commits SET tag = ? WHERE hash = ?
+        """, (tag_name, commit_hash))
+        self.conn.commit()
+
+    def get_commit_by_tag(self, tag_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get commit by tag name.
+
+        Args:
+            tag_name: Tag name
+
+        Returns:
+            Commit dictionary or None if tag doesn't exist
+        """
+        if self.conn is None:
+            self.connect()
+
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM commits WHERE tag = ?", (tag_name,))
+        row = cursor.fetchone()
+
+        if row:
+            result = dict(row)
+            # Parse JSON fields
+            if result.get('selected_mesh_names'):
+                try:
+                    result['selected_mesh_names'] = json.loads(result['selected_mesh_names'])
+                except (json.JSONDecodeError, TypeError):
+                    result['selected_mesh_names'] = []
+            else:
+                result['selected_mesh_names'] = []
+
+            if result.get('export_options'):
+                try:
+                    result['export_options'] = json.loads(result['export_options'])
+                except (json.JSONDecodeError, TypeError):
+                    result['export_options'] = {}
+            else:
+                result['export_options'] = {}
+
+            # Set default commit_type if not present
+            if 'commit_type' not in result or not result['commit_type']:
+                result['commit_type'] = 'project'
+
+            return result
+        return None
+
+    def list_tags(self) -> List[Dict[str, Any]]:
+        """
+        List all tags.
+
+        Returns:
+            List of tag information dictionaries
+        """
+        if self.conn is None:
+            self.connect()
+
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT hash, tag, author, message, timestamp, branch, commit_type
+            FROM commits
+            WHERE tag IS NOT NULL AND tag != ''
+            ORDER BY tag ASC
+        """)
+
+        tags = []
+        for row in cursor.fetchall():
+            result = dict(row)
+            tags.append({
+                'tag': result['tag'],
+                'commit_hash': result['hash'],
+                'author': result.get('author', 'Unknown'),
+                'message': result.get('message', ''),
+                'timestamp': result.get('timestamp', 0),
+                'branch': result.get('branch', 'main'),
+                'commit_type': result.get('commit_type', 'project'),
+            })
+
+        return tags
+
     # ========== Trees operations ==========
 
     def add_tree(self, tree_hash: str, entries: List[Dict[str, Any]]) -> None:

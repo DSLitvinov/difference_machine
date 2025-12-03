@@ -56,6 +56,12 @@ from .review import (
     get_approval,
     get_all_approvals,
 )
+from .tag import (
+    create_tag,
+    delete_tag,
+    list_tags,
+    show_tag,
+)
 
 __all__ = [
     "init_repository",
@@ -97,5 +103,9 @@ __all__ = [
     "delete_commit",
     "rebuild_database",
     "garbage_collect",
+    "create_tag",
+    "delete_tag",
+    "list_tags",
+    "show_tag",
 ]
 

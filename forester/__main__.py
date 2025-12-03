@@ -18,6 +18,7 @@ from .commands.branch import (
 )
 from .commands.checkout import checkout, checkout_branch, checkout_commit
 from .commands.stash import create_stash, list_stashes, apply_stash, delete_stash
+from .commands.tag import create_tag, delete_tag, list_tags, show_tag
 
 
 def cmd_init(args):
@@ -335,6 +336,10 @@ def cmd_show(args):
             print(f"Date: {date_str}")
             print(f"Message: {commit.message}")
             print(f"Type: {commit.commit_type}")
+            # Get tag from database
+            commit_data = db.get_commit(commit.hash)
+            if commit_data and commit_data.get('tag'):
+                print(f"Tag: {commit_data['tag']}")
             if commit.parent_hash:
                 print(f"Parent: {commit.parent_hash[:16]}...")
 
@@ -446,9 +451,11 @@ def cmd_log(args):
             message = commit.get('message', 'No message')
             author = commit.get('author', 'Unknown')
             commit_type = commit.get('commit_type', 'project')
+            tag = commit.get('tag')
 
             type_icon = "📦" if commit_type == "mesh_only" else "📁"
-            print(f"{hash_short} {type_icon} {author} | {date_str}")
+            tag_str = f" [{tag}]" if tag else ""
+            print(f"{hash_short} {type_icon} {author} | {date_str}{tag_str}")
             print(f"    {message}")
             if args.verbose:
                 if commit.get('parent_hash'):
@@ -470,6 +477,68 @@ def cmd_log(args):
         print(f"Error: {e}")
         import traceback
         traceback.print_exc()
+        return 1
+
+
+def cmd_tag(args):
+    """Handle tag commands."""
+    repo_path = find_repository(Path.cwd())
+    if not repo_path:
+        print("Error: Not a Forester repository")
+        return 1
+
+    try:
+        if args.action == "create":
+            create_tag(repo_path, args.name, commit_hash=args.commit)
+            print(f"Created tag: {args.name}")
+            return 0
+
+        elif args.action == "list":
+            tags = list_tags(repo_path)
+            if not tags:
+                print("No tags found")
+                return 0
+
+            import datetime
+            for tag_info in tags:
+                date_str = datetime.datetime.fromtimestamp(tag_info['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+                commit_hash = tag_info['commit_hash'][:16]
+                message = tag_info.get('message', 'No message')
+                author = tag_info.get('author', 'Unknown')
+                print(f"{tag_info['tag']:20} -> {commit_hash}  {author} | {date_str}")
+                print(f"  {message}")
+
+            return 0
+
+        elif args.action == "delete":
+            delete_tag(repo_path, args.name)
+            print(f"Deleted tag: {args.name}")
+            return 0
+
+        elif args.action == "show":
+            tag_info = show_tag(repo_path, args.name)
+            if not tag_info:
+                print(f"Error: Tag '{args.name}' not found")
+                return 1
+
+            import datetime
+            date_str = datetime.datetime.fromtimestamp(tag_info['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+
+            print(f"Tag: {tag_info['tag']}")
+            print(f"Commit: {tag_info['commit_hash']}")
+            print(f"Author: {tag_info['author']}")
+            print(f"Date: {date_str}")
+            print(f"Message: {tag_info['message']}")
+            print(f"Branch: {tag_info['branch']}")
+            print(f"Type: {tag_info['commit_type']}")
+
+            return 0
+
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except Exception as e:
+        print(f"Error: {e}")
         return 1
 
 
@@ -549,6 +618,22 @@ def main():
     log_parser.add_argument("branch", nargs="?", help="Branch name (default: current branch)")
     log_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed information")
 
+    # Tag command
+    tag_parser = subparsers.add_parser("tag", help="Manage tags")
+    tag_subparsers = tag_parser.add_subparsers(dest="action", help="Tag action")
+
+    tag_create = tag_subparsers.add_parser("create", help="Create a tag")
+    tag_create.add_argument("name", help="Tag name")
+    tag_create.add_argument("commit", nargs="?", help="Commit hash (default: current HEAD)")
+
+    tag_subparsers.add_parser("list", help="List all tags")
+
+    tag_delete = tag_subparsers.add_parser("delete", help="Delete a tag")
+    tag_delete.add_argument("name", help="Tag name")
+
+    tag_show = tag_subparsers.add_parser("show", help="Show tag information")
+    tag_show.add_argument("name", help="Tag name")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -574,6 +659,8 @@ def main():
         return cmd_show(args)
     elif args.command == "log":
         return cmd_log(args)
+    elif args.command == "tag":
+        return cmd_tag(args)
     else:
         parser.print_help()
         return 1

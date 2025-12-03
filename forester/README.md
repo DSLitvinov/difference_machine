@@ -71,6 +71,25 @@ forester stash apply <hash> [--force]
 forester stash delete <hash>
 ```
 
+### Tag Management
+
+```bash
+# Create tag (on current HEAD)
+forester tag create <tag_name>
+
+# Create tag on specific commit
+forester tag create <tag_name> <commit_hash>
+
+# List all tags
+forester tag list
+
+# Show tag information
+forester tag show <tag_name>
+
+# Delete tag
+forester tag delete <tag_name>
+```
+
 ### Status
 
 ```bash
@@ -105,6 +124,7 @@ project/
 - **Version Control**: Track changes to files and 3D meshes
 - **Branching**: Create and manage multiple branches
 - **Commits**: Create snapshots of your project state
+- **Tags**: Mark important commits with tags
 - **Stash**: Temporarily save uncommitted changes
 - **Deduplication**: Files and meshes are stored once, referenced multiple times
 - **Mesh Support**: Special handling for 3D mesh data (JSON format)
@@ -120,7 +140,7 @@ project/
 Forester can also be used as a Python library:
 
 ```python
-from forester.commands import init_repository, create_commit, create_branch
+from forester.commands import init_repository, create_commit, create_branch, create_tag
 
 # Initialize repository
 init_repository(Path("/path/to/project"))
@@ -130,6 +150,9 @@ create_commit(Path("/path/to/project"), "Message", "Author")
 
 # Create branch
 create_branch(Path("/path/to/project"), "feature1")
+
+# Create tag
+create_tag(Path("/path/to/project"), "v1.0", commit_hash="abc123...")
 ```
 
 
