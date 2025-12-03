@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 def checkout(repo_path: Path, target: str, force: bool = False,
              file_patterns: Optional[List[str]] = None,
-             mesh_names: Optional[List[str]] = None) -> Tuple[bool, Optional[str]]:
+             mesh_names: Optional[List[str]] = None,
+             skip_hooks: bool = False) -> Tuple[bool, Optional[str]]:
     """
     Checkout a branch or commit.
 
@@ -35,17 +36,26 @@ def checkout(repo_path: Path, target: str, force: bool = False,
                        If None, all files are checked out
         mesh_names: List of mesh names to selectively checkout (only for mesh_only commits)
                     If None, all meshes are checked out
+        skip_hooks: If True, skip pre-checkout and post-checkout hooks
 
     Returns:
         Tuple of (success: bool, error_message: Optional[str])
         error_message contains "uncommitted_changes" if there are uncommitted changes
 
     Raises:
-        ValueError: If target doesn't exist
+        ValueError: If target doesn't exist or pre-checkout hook fails
     """
     dfm_dir = repo_path / ".DFM"
     if not dfm_dir.exists():
         raise ValueError(f"Repository not initialized at {repo_path}")
+
+    # Run pre-checkout hook
+    if not skip_hooks:
+        from ..core.hooks import run_pre_checkout_hook
+        try:
+            run_pre_checkout_hook(repo_path, target, skip_hooks=False)
+        except ValueError as e:
+            return (False, f"Pre-checkout hook failed: {str(e)}")
 
     # Check for uncommitted changes
     if not force and has_uncommitted_changes(repo_path):
@@ -120,6 +130,11 @@ def checkout(repo_path: Path, target: str, force: bool = False,
         else:
             # Detached HEAD state (pointing to commit)
             db.set_head(commit_hash)
+
+        # Step 5: Run post-checkout hook
+        if not skip_hooks:
+            from ..core.hooks import run_post_checkout_hook
+            run_post_checkout_hook(repo_path, target, skip_hooks=False)
 
     return (True, None)
 

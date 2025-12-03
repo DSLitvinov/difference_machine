@@ -119,7 +119,7 @@ def find_repo(path: Path) -> Optional[Path]:
 # ========== Commits ==========
 
 def commit(path: Path, message: str, author: str = "Unknown",
-           check_locks: bool = True) -> Optional[str]:
+           check_locks: bool = True, skip_hooks: bool = False) -> Optional[str]:
     """
     Create a new commit.
 
@@ -128,6 +128,7 @@ def commit(path: Path, message: str, author: str = "Unknown",
         message: Commit message
         author: Author name
         check_locks: Check for file locks before committing
+        skip_hooks: Skip pre-commit and post-commit hooks
 
     Returns:
         Commit hash or None if no changes
@@ -138,7 +139,7 @@ def commit(path: Path, message: str, author: str = "Unknown",
         ...     print(f"Committed: {commit_hash[:16]}")
     """
     repo_path = _get_repo_path(path)
-    return create_commit(repo_path, message, author, check_locks)
+    return create_commit(repo_path, message, author, check_locks, screenshot_hash=None, skip_hooks=skip_hooks)
 
 
 def has_changes(path: Path) -> bool:
@@ -296,7 +297,8 @@ def switch_to_branch(path: Path, branch_name: str) -> bool:
 
 def checkout_files(path: Path, target: str, force: bool = False,
                    file_patterns: Optional[List[str]] = None,
-                   mesh_names: Optional[List[str]] = None) -> Tuple[bool, Optional[str]]:
+                   mesh_names: Optional[List[str]] = None,
+                   skip_hooks: bool = False) -> Tuple[bool, Optional[str]]:
     """
     Checkout files from a commit or branch (with selective checkout).
 
@@ -306,6 +308,7 @@ def checkout_files(path: Path, target: str, force: bool = False,
         force: Discard uncommitted changes
         file_patterns: File path patterns to selectively checkout (e.g., ["textures/*"])
         mesh_names: Mesh names to selectively checkout (for mesh_only commits)
+        skip_hooks: Skip pre-checkout and post-checkout hooks
 
     Returns:
         Tuple of (success, error_message)
@@ -323,7 +326,7 @@ def checkout_files(path: Path, target: str, force: bool = False,
     if not repo_path:
         return (False, "Not a Forester repository")
 
-    return checkout(repo_path, target, force, file_patterns, mesh_names)
+    return checkout(repo_path, target, force, file_patterns, mesh_names, skip_hooks)
 
 
 # ========== File Locking ==========

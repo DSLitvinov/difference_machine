@@ -48,7 +48,8 @@ def cmd_commit(args):
         commit_hash = create_commit(
             repo_path,
             message=args.message or "No message",
-            author=args.author or "Unknown"
+            author=args.author or "Unknown",
+            skip_hooks=getattr(args, 'no_verify', False)
         )
 
         if commit_hash:
@@ -127,7 +128,7 @@ def cmd_checkout(args):
         return 1
 
     try:
-        success, error = checkout(repo_path, args.target, force=args.force)
+        success, error = checkout(repo_path, args.target, force=args.force, skip_hooks=getattr(args, 'no_verify', False))
 
         if success:
             print(f"Checked out: {args.target}")
@@ -560,6 +561,7 @@ def main():
     commit_parser = subparsers.add_parser("commit", help="Create a new commit")
     commit_parser.add_argument("-m", "--message", help="Commit message")
     commit_parser.add_argument("-a", "--author", help="Author name")
+    commit_parser.add_argument("--no-verify", action="store_true", help="Skip pre-commit and post-commit hooks")
 
     # Branch command
     branch_parser = subparsers.add_parser("branch", help="Manage branches")
@@ -582,6 +584,7 @@ def main():
     checkout_parser = subparsers.add_parser("checkout", help="Checkout a branch or commit")
     checkout_parser.add_argument("target", help="Branch name or commit hash")
     checkout_parser.add_argument("--force", action="store_true", help="Discard uncommitted changes")
+    checkout_parser.add_argument("--no-verify", action="store_true", help="Skip pre-checkout and post-checkout hooks")
 
     # Stash command
     stash_parser = subparsers.add_parser("stash", help="Manage stashes")
