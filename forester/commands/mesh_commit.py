@@ -83,7 +83,8 @@ def create_mesh_only_commit(
     export_options: Dict[str, bool],
     message: str,
     author: str = "Unknown",
-    screenshot_hash: Optional[str] = None
+    screenshot_hash: Optional[str] = None,
+    skip_hooks: bool = False
 ) -> Optional[str]:
     """
     Create a mesh-only commit from selected meshes.
@@ -98,6 +99,7 @@ def create_mesh_only_commit(
         message: Commit message
         author: Author name
         screenshot_hash: Optional screenshot blob hash
+        skip_hooks: If True, skip pre-commit and post-commit hooks
 
     Returns:
         Commit hash if successful, None otherwise
@@ -118,6 +120,14 @@ def create_mesh_only_commit(
     branch = get_current_branch(repo_path)
     if not branch:
         raise ValueError("No current branch set")
+
+    # Run pre-commit hook
+    if not skip_hooks:
+        from ..core.hooks import run_pre_commit_hook
+        try:
+            run_pre_commit_hook(repo_path, branch, author, message, skip_hooks=False)
+        except ValueError as e:
+            raise ValueError(f"Pre-commit hook failed: {str(e)}")
 
     # Get parent commit
     parent_hash = get_current_head_commit(repo_path)
@@ -441,6 +451,11 @@ def create_mesh_only_commit(
 
         # Update HEAD in database
         db.set_head(commit.hash)
+
+        # Run post-commit hook
+        if not skip_hooks:
+            from ..core.hooks import run_post_commit_hook
+            run_post_commit_hook(repo_path, commit.hash, branch, author, message, skip_hooks=False)
 
         return commit.hash
 

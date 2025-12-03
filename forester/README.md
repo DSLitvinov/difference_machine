@@ -96,6 +96,60 @@ forester tag delete <tag_name>
 forester status
 ```
 
+### Hooks
+
+Forester supports Git-like hooks for automation. Hooks are scripts located in `.DFM/hooks/` directory.
+
+#### Available Hooks
+
+- **pre-commit**: Runs before commit creation. Can block commit if it returns non-zero exit code.
+- **post-commit**: Runs after commit creation. Cannot block commit.
+- **pre-checkout**: Runs before checkout. Can block checkout if it returns non-zero exit code.
+- **post-checkout**: Runs after checkout. Cannot block checkout.
+
+#### Hook Environment Variables
+
+Hooks receive the following environment variables:
+
+**Pre-commit / Post-commit hooks:**
+- `DFM_BRANCH` - Current branch name
+- `DFM_AUTHOR` - Commit author
+- `DFM_MESSAGE` - Commit message
+- `DFM_REPO_PATH` - Repository root path
+- `DFM_COMMIT_HASH` - Commit hash (post-commit only)
+
+**Pre-checkout / Post-checkout hooks:**
+- `DFM_TARGET` - Branch name or commit hash being checked out
+- `DFM_REPO_PATH` - Repository root path
+
+#### Example Hooks
+
+**Pre-commit hook** (`.DFM/hooks/pre-commit`):
+```bash
+#!/bin/bash
+# Check commit message length
+if [ ${#DFM_MESSAGE} -lt 10 ]; then
+    echo "Error: Commit message too short (minimum 10 characters)"
+    exit 1
+fi
+```
+
+**Post-commit hook** (`.DFM/hooks/post-commit`):
+```bash
+#!/bin/bash
+# Send notification after commit
+echo "Commit $DFM_COMMIT_HASH created by $DFM_AUTHOR on branch $DFM_BRANCH"
+```
+
+#### Skipping Hooks
+
+Use `--no-verify` flag to skip hooks:
+
+```bash
+forester commit -m "Message" --no-verify
+forester checkout main --no-verify
+```
+
 ## Repository Structure
 
 ```
@@ -104,6 +158,11 @@ project/
 │   ├── forester.db          # SQLite database
 │   ├── metadata.json        # Repository metadata
 │   ├── .dfmignore          # Ignore rules
+│   ├── hooks/              # Hook scripts
+│   │   ├── pre-commit      # Pre-commit hook (optional)
+│   │   ├── post-commit     # Post-commit hook (optional)
+│   │   ├── pre-checkout    # Pre-checkout hook (optional)
+│   │   └── post-checkout   # Post-checkout hook (optional)
 │   ├── refs/
 │   │   └── branches/        # Branch references
 │   ├── objects/
@@ -126,6 +185,7 @@ project/
 - **Commits**: Create snapshots of your project state
 - **Tags**: Mark important commits with tags
 - **Stash**: Temporarily save uncommitted changes
+- **Hooks**: Pre-commit/post-commit hooks for automation
 - **Deduplication**: Files and meshes are stored once, referenced multiple times
 - **Mesh Support**: Special handling for 3D mesh data (JSON format)
 

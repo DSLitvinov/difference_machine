@@ -51,6 +51,10 @@ def init_repository(project_path: Path, force: bool = False) -> bool:
     stash_dir = dfm_dir / "stash"
     stash_dir.mkdir(exist_ok=True)
 
+    # Create hooks directory
+    hooks_dir = dfm_dir / "hooks"
+    hooks_dir.mkdir(exist_ok=True)
+
     # Initialize database
     db_path = dfm_dir / "forester.db"
     with ForesterDB(db_path) as db:

@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 def create_commit(repo_path: Path, message: str, author: str = "Unknown",
-                  check_locks: bool = True, screenshot_hash: Optional[str] = None) -> Optional[str]:
+                  check_locks: bool = True, screenshot_hash: Optional[str] = None,
+                  skip_hooks: bool = False) -> Optional[str]:
     """
     Create a new commit from current working directory.
 
@@ -30,12 +31,13 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown",
         author: Author name
         check_locks: If True, check for file locks before committing
         screenshot_hash: Optional screenshot blob hash
+        skip_hooks: If True, skip pre-commit and post-commit hooks
 
     Returns:
         Commit hash if successful, None otherwise
 
     Raises:
-        ValueError: If repository is not initialized, no changes detected, or files are locked
+        ValueError: If repository is not initialized, no changes detected, files are locked, or pre-commit hook fails
     """
     dfm_dir = repo_path / ".DFM"
     if not dfm_dir.exists():
@@ -45,6 +47,14 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown",
     branch = get_current_branch(repo_path)
     if not branch:
         raise ValueError("No current branch set")
+
+    # Run pre-commit hook
+    if not skip_hooks:
+        from ..core.hooks import run_pre_commit_hook
+        try:
+            run_pre_commit_hook(repo_path, branch, author, message, skip_hooks=False)
+        except ValueError as e:
+            raise ValueError(f"Pre-commit hook failed: {str(e)}")
 
     # Get parent commit
     parent_hash = get_current_head_commit(repo_path)
@@ -191,6 +201,11 @@ def create_commit(repo_path: Path, message: str, author: str = "Unknown",
 
         # Step 7: Update HEAD in database
         db.set_head(commit.hash)
+
+        # Step 8: Run post-commit hook
+        if not skip_hooks:
+            from ..core.hooks import run_post_commit_hook
+            run_post_commit_hook(repo_path, commit.hash, branch, author, message, skip_hooks=False)
 
         return commit.hash
 
