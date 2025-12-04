@@ -26,7 +26,7 @@ class ObjectStorage:
         self.objects_dir = base_dir / "objects"
 
         # Ensure object directories exist
-        for obj_type in ["blobs", "trees", "commits", "meshes"]:
+        for obj_type in ["blobs", "trees", "commits", "meshes", "textures"]:
             (self.objects_dir / obj_type).mkdir(parents=True, exist_ok=True)
 
     # ========== Blob operations ==========
@@ -292,6 +292,80 @@ class ObjectStorage:
                 mesh_dir.parent.parent.rmdir()
             except OSError:
                 pass
+
+    # ========== Texture operations ==========
+
+    def save_texture(
+        self,
+        texture_data: bytes,
+        texture_hash: str,
+        format: Optional[str] = None
+    ) -> Path:
+        """
+        Save texture to storage.
+
+        Args:
+            texture_data: Binary texture data
+            texture_hash: SHA-256 hash of the texture
+            format: Texture format (PNG, JPEG, etc.) for file extension
+
+        Returns:
+            Path where texture was saved
+        """
+        # Determine file extension
+        ext = '.png'  # default
+        if format:
+            format_lower = format.lower()
+            if format_lower in ['jpeg', 'jpg']:
+                ext = '.jpg'
+            elif format_lower == 'exr':
+                ext = '.exr'
+            elif format_lower == 'tga':
+                ext = '.tga'
+            elif format_lower == 'webp':
+                ext = '.webp'
+            elif format_lower == 'png':
+                ext = '.png'
+
+        texture_path = hash_to_path(texture_hash, self.base_dir, "textures")
+        texture_path = texture_path.with_suffix(ext)
+        texture_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Check if texture already exists
+        if texture_path.exists():
+            return texture_path
+
+        with open(texture_path, 'wb') as f:
+            f.write(texture_data)
+
+        return texture_path
+
+    def load_texture(self, texture_hash: str) -> Optional[bytes]:
+        """
+        Load texture from storage.
+
+        Args:
+            texture_hash: SHA-256 hash of the texture
+
+        Returns:
+            Binary texture data or None if not found
+        """
+        # Try different extensions
+        base_path = hash_to_path(texture_hash, self.base_dir, "textures")
+        for ext in ['.png', '.jpg', '.jpeg', '.exr', '.tga', '.webp']:
+            texture_path = base_path.with_suffix(ext)
+            if texture_path.exists():
+                with open(texture_path, 'rb') as f:
+                    return f.read()
+        return None
+
+    def texture_exists(self, texture_hash: str) -> bool:
+        """Check if texture exists in storage."""
+        base_path = hash_to_path(texture_hash, self.base_dir, "textures")
+        for ext in ['.png', '.jpg', '.jpeg', '.exr', '.tga', '.webp']:
+            if base_path.with_suffix(ext).exists():
+                return True
+        return False
 
 
 

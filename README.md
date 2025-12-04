@@ -62,6 +62,11 @@ Difference Machine is a Blender add-on that provides Git-like version control fu
   - Only changed textures are copied to commits
   - Texture path resolution with multiple fallback strategies
   - Support for packed and external textures
+- **Independent Texture Versioning**: Textures are versioned separately from meshes
+  - Deduplication at texture level (one texture can be used by many meshes)
+  - Texture history tracking independent from mesh commits
+  - Automatic texture versioning during commit creation
+  - Textures stored in `.DFM/objects/textures/` with content-addressable hashing
 
 ### Comparison Mode
 - When comparison object is active:
@@ -197,7 +202,7 @@ difference_machine/
 ├── forester/               # Version control engine
 │   ├── commands/           # Core commands (init, commit, branch, etc.)
 │   ├── core/               # Core functionality (database, storage, etc.)
-│   ├── models/             # Data models (Commit, Mesh, Tree, MeshDiff, etc.)
+│   ├── models/             # Data models (Commit, Mesh, Tree, MeshDiff, Texture, etc.)
 │   └── utils/              # Utility functions (mesh_diff_utils, etc.)
 └── utils/                  # Helper functions
 ```
@@ -219,6 +224,12 @@ difference_machine/
   - Face topology comparison
   - Material and texture diff analysis
   - Vertex color visualization for change highlighting
+- **Texture Versioning**: Independent texture versioning
+  - Separate texture storage in `.DFM/objects/textures/`
+  - Database tables: `textures`, `texture_commits` for texture-commit relationships
+  - Automatic texture versioning during commit creation
+  - Content-addressable storage with deduplication
+  - PIL/Pillow integration for image metadata extraction (with fallback)
 
 ## License
 

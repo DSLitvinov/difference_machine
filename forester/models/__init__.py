@@ -8,6 +8,7 @@ from .tree import Tree, TreeEntry
 from .commit import Commit
 from .mesh import Mesh
 from .mesh_diff import MeshDiff, GeometryDiff, MaterialDiff, DiffStatistics
+from .texture import Texture
 
 __all__ = [
     "Blob",
@@ -19,6 +20,7 @@ __all__ = [
     "GeometryDiff",
     "MaterialDiff",
     "DiffStatistics",
+    "Texture",
 ]
 
 

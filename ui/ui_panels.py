@@ -615,7 +615,7 @@ class DF_PT_diff_panel(Panel):
             # Show commit selection
             if hasattr(scene, 'df_commits') and scene.df_commits:
                 box = layout.box()
-                box.label(text="Select commit to compare:", icon='HISTORY')
+                box.label(text="Select commit to compare:", icon='TIME')
                 
                 # Show last few commits
                 commits = scene.df_commits

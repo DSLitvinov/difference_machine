@@ -94,3 +94,24 @@ priority: 4
 - Geometry diff tracks: vertices_added, vertices_removed, vertices_modified, vertices_moved, faces_added, faces_removed
 - Material diff tracks: properties_changed, textures_added/removed/modified, nodes_added/removed/modified
 - Statistics include: counts, percentages, displacement metrics
+
+## Texture Versioning
+
+### Texture Versioning
+- Textures are versioned independently from meshes using `Texture` model from `forester.models.texture`
+- Use `Texture.from_file()` to create texture from file, automatically saves to storage
+- Link textures to commits using `db.link_texture_to_commit(texture_hash, commit_hash, mesh_hash)`
+- Textures are stored in `.DFM/objects/textures/{hash[:2]}/{hash[2:]}.{ext}`
+- Automatic texture versioning happens during mesh commit creation
+- Content-addressable storage with SHA-256 hashing ensures deduplication
+
+### Texture Storage Operations
+- Use `ObjectStorage.save_texture()` to save texture data
+- Use `ObjectStorage.load_texture()` to load texture (tries multiple extensions)
+- Always check if texture exists before saving: `storage.texture_exists(hash)`
+
+### Database Texture Operations
+- Use `db.add_texture()` to add texture metadata
+- Use `db.get_texture()` to retrieve texture info
+- Use `db.link_texture_to_commit()` to associate texture with commit
+- Use `db.get_textures_for_commit()` to get all textures in commit

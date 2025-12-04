@@ -39,7 +39,7 @@ Sure! Here's the English translation of the provided **USER_GUIDE_RU.md**:
 
 ## Main Panels
 
-The add-on features three main panels (accessible under the **Difference Machine** tab in the sidebar `N`):
+The add-on features four main panels (accessible under the **Difference Machine** tab in the sidebar `N`):
 
 1. **Branch Management**  
    - View branch list  
@@ -283,6 +283,20 @@ These operations overwrite the working directory. Unsaved changes will be lost.
   - Vertex color visualization
   - Restore material display
 
+### Texture Versioning
+
+**How it works:**
+- Textures are automatically versioned when creating commits.
+- Each texture is stored independently with its own hash.
+- Unchanged textures are automatically deduplicated - same texture file is stored only once.
+- One texture can be used by many meshes without duplication.
+- Texture history is tracked separately from mesh commits.
+
+**Benefits:**
+- Efficient storage: unchanged textures are not duplicated.
+- Independent versioning: texture changes don't require new mesh commits.
+- Easy tracking: see which textures are used in which commits.
+
 ### Project Comparison
 
 **How to use:**
@@ -355,6 +369,10 @@ These operations overwrite the working directory. Unsaved changes will be lost.
 - The add-on automatically tracks textures.
 - Modified textures are copied into the commit.
 - Unchanged textures are deduplicated (referenced from previous versions).
+- **Texture Versioning**: Textures are versioned independently from meshes.
+  - One texture can be used by many meshes without duplication.
+  - Texture history is tracked separately.
+  - Efficient storage with content-addressable hashing.
 
 ### CLI (Command Line)
 Advanced users can use the `forester` CLI:

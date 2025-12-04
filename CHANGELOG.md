@@ -35,6 +35,20 @@ All notable changes to the Difference Machine project will be documented in this
   - Available in Mesh Diff panel (4th panel in Difference Machine tab)
   - Models: `forester/models/mesh_diff.py` (MeshDiff, GeometryDiff, MaterialDiff, DiffStatistics)
   - Utilities: `forester/utils/mesh_diff_utils.py` (compute functions)
+- **Independent Texture Versioning**: Textures are versioned separately from meshes
+  - Separate texture storage in `.DFM/objects/textures/`
+  - Texture deduplication at texture level (one texture can be used by many meshes)
+  - Texture history tracking independent from mesh commits
+  - Automatic texture versioning during commit creation
+  - Database tables: `textures`, `texture_commits` for texture-commit relationships
+  - Content-addressable storage with SHA-256 hashing
+  - PIL/Pillow integration for image metadata extraction (with fallback)
+  - **Models**: `forester/models/texture.py` (Texture model)
+  - **Storage**: Extended ObjectStorage with texture operations
+    - `save_texture()`, `load_texture()`, `texture_exists()`
+  - **Database**: Extended ForesterDB with texture methods
+    - `add_texture()`, `get_texture()`, `texture_exists()`
+    - `link_texture_to_commit()`, `get_textures_for_commit()`
 - **Database Rebuild Mechanism**: Added `rebuild_database` command to reconstruct corrupted database from file system storage
   - Automatically scans storage directories and rebuilds database tables
   - Creates backup of existing database before rebuilding
