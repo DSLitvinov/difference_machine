@@ -73,3 +73,24 @@ priority: 4
 ### Silent Failures
 - Use `try/except` with `pass` for non-critical operations
 - Example: Cleanup operations that shouldn't break addon load
+
+## Mesh Diff Visualization
+
+### Vertex Color Visualization
+- Use vertex colors for diff visualization instead of materials
+- When applying diff visualization, switch viewport to vertex color mode: `space.shading.color_type = 'VERTEX'`
+- Materials are temporarily hidden when vertex colors are displayed
+- Always create vertex color layer with unique name (e.g., "DiffColors")
+- Clear vertex colors when clearing diff data
+
+### Diff Computation
+- Compute diff between two mesh versions using `compute_mesh_diff()` from `forester.utils.mesh_diff_utils`
+- Store diff results in scene properties as dictionary (use `diff.to_dict()`)
+- Diff includes geometry changes, material changes, and statistics
+- Tolerance-based vertex matching (default: 0.001) for geometry comparison
+
+### Diff Models
+- Use `MeshDiff`, `GeometryDiff`, `MaterialDiff`, `DiffStatistics` from `forester.models.mesh_diff`
+- Geometry diff tracks: vertices_added, vertices_removed, vertices_modified, vertices_moved, faces_added, faces_removed
+- Material diff tracks: properties_changed, textures_added/removed/modified, nodes_added/removed/modified
+- Statistics include: counts, percentages, displacement metrics

@@ -147,7 +147,7 @@ class DFCommitProperties(bpy.types.PropertyGroup):
         def refresh_after_update():
             try:
                 bpy.ops.df.refresh_history()
-            except Exception:
+            except:
                 pass  # Silently fail if can't refresh
         
         # Schedule refresh for next frame
@@ -362,6 +362,19 @@ def register():
         name="Preview Commit Hash",
         default="",
     )
+    
+    # Diff visualization properties
+    bpy.types.Scene.df_diff_color_scheme = bpy.props.EnumProperty(
+        name="Diff Color Scheme",
+        description="Color scheme for diff visualization",
+        items=[
+            ('displacement', 'Displacement', 'Color by vertex displacement magnitude'),
+            ('added', 'Added', 'Green for added vertices'),
+            ('removed', 'Removed', 'Red for removed vertices'),
+            ('modified', 'Modified', 'Yellow for modified vertices'),
+        ],
+        default='displacement',
+    )
 
 
 def unregister():
@@ -372,94 +385,94 @@ def unregister():
     if hasattr(bpy.types.Scene, 'df_commits'):
         try:
             del bpy.types.Scene.df_commits
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_branches'):
         try:
             del bpy.types.Scene.df_branches
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_branch_list_index'):
         try:
             del bpy.types.Scene.df_branch_list_index
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_commit_list_index'):
         try:
             del bpy.types.Scene.df_commit_list_index
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_commit_props'):
         try:
             del bpy.types.Scene.df_commit_props
-        except Exception:
+        except:
             pass
     
     # Unregister comparison properties
     if hasattr(bpy.types.Scene, 'df_comparison_active'):
         try:
             del bpy.types.Scene.df_comparison_active
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_comparison_object_name'):
         try:
             del bpy.types.Scene.df_comparison_object_name
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_original_object_name'):
         try:
             del bpy.types.Scene.df_original_object_name
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_comparison_commit_hash'):
         try:
             del bpy.types.Scene.df_comparison_commit_hash
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_comparison_axis'):
         try:
             del bpy.types.Scene.df_comparison_axis
-        except Exception:
+        except:
             pass
     
     # Unregister project comparison properties
     if hasattr(bpy.types.Scene, 'df_project_comparison_active'):
         try:
             del bpy.types.Scene.df_project_comparison_active
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_project_comparison_commit_hash'):
         try:
             del bpy.types.Scene.df_project_comparison_commit_hash
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_project_comparison_temp_dir'):
         try:
             del bpy.types.Scene.df_project_comparison_temp_dir
-        except Exception:
+        except:
             pass
     
     # Unregister preview properties
     if hasattr(bpy.types.Scene, 'df_preview_temp_dir'):
         try:
             del bpy.types.Scene.df_preview_temp_dir
-        except Exception:
+        except:
             pass
     
     if hasattr(bpy.types.Scene, 'df_preview_commit_hash'):
         try:
             del bpy.types.Scene.df_preview_commit_hash
-        except Exception:
+        except:
             pass
     
     # Unregister classes

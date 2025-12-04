@@ -236,3 +236,5 @@ forester checkout main --no-verify
 
 Hooks have a default timeout of 30 seconds. If a hook takes longer, it will be terminated and the operation will fail (for pre-commit/pre-checkout) or continue (for post-commit/post-checkout).
 
+
+

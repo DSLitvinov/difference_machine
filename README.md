@@ -27,6 +27,7 @@ Difference Machine is a Blender add-on that provides Git-like version control fu
 - **Compare Meshes**: Compare current mesh with version from commit
   - Select axis (X, Y, Z) for comparison object offset
   - Visual side-by-side comparison
+  - Automatic diff computation when comparing
 - **Replace Mesh**: Replace current mesh with version from commit
 - **Load Mesh Version**: Load mesh from specific commit
 - **Mesh Information Display**: When viewing mesh-only commits, see detailed info for all meshes
@@ -34,6 +35,26 @@ Difference Machine is a Blender add-on that provides Git-like version control fu
   - Vertices count
   - Faces count
 - **Export Options**: Control what gets exported (vertices, faces, UV, normals, materials, transform)
+
+### Mesh Diff Analysis
+- **3D Diff Visualization**: Analyze differences between mesh versions
+  - Compute diff between current mesh and version from commit
+  - Visualize changes using vertex colors
+  - Multiple color schemes: displacement, added, removed, modified vertices
+- **Diff Statistics**: Detailed statistics about changes
+  - Geometry changes: added/removed/modified vertices and faces
+  - Material changes: added/removed/modified textures and nodes
+  - Percentage change metrics
+  - Vertex displacement metrics (max and average)
+- **Visualization Modes**:
+  - **Displacement**: Color by vertex displacement magnitude (red = more changes, green = less)
+  - **Added**: Green for added vertices
+  - **Removed**: Red for removed vertices
+  - **Modified**: Yellow for modified vertices
+- **Material Diff**: Compare material changes between versions
+  - Texture changes (added/removed/modified)
+  - Node tree changes (added/removed/modified nodes)
+  - Material property changes
 
 ### Material & Texture Handling
 - **Material Export/Import**: Full material node tree export and import
@@ -76,6 +97,10 @@ After installation, you can access Difference Machine from the 3D Viewport sideb
 1. **Branch Management**: Manage branches, create, switch, and delete branches
 2. **Create Commit**: Create new commits (project or mesh-only) with export options
 3. **Load Commit**: View commit history, load/replace meshes, compare versions
+4. **Mesh Diff**: Analyze and visualize differences between mesh versions
+  - Compute diff statistics
+  - Visualize changes with vertex colors
+  - Compare materials and textures
 
 ### Preferences
 
@@ -145,9 +170,10 @@ forester gc [--dry-run]
 1. **Initialize Repository**: The add-on automatically initializes a repository when you create your first commit, or use `forester init`
 2. **Create Commits**: Select mesh objects and create a commit with a message
 3. **Compare Versions**: Use the Compare feature to see differences between versions
-4. **Manage Branches**: Create branches for different variations of your model
-5. **Restore Versions**: Load or replace meshes from previous commits
-6. **View Commit Changes**: Use `forester show <commit_hash>` to see what files changed in a commit
+4. **Analyze Differences**: Use Mesh Diff panel to compute and visualize detailed changes
+5. **Manage Branches**: Create branches for different variations of your model
+6. **Restore Versions**: Load or replace meshes from previous commits
+7. **View Commit Changes**: Use `forester show <commit_hash>` to see what files changed in a commit
 
 ## Structure
 
@@ -171,7 +197,8 @@ difference_machine/
 ├── forester/               # Version control engine
 │   ├── commands/           # Core commands (init, commit, branch, etc.)
 │   ├── core/               # Core functionality (database, storage, etc.)
-│   └── models/             # Data models (Commit, Mesh, Tree, etc.)
+│   ├── models/             # Data models (Commit, Mesh, Tree, MeshDiff, etc.)
+│   └── utils/              # Utility functions (mesh_diff_utils, etc.)
 └── utils/                  # Helper functions
 ```
 
@@ -187,6 +214,11 @@ difference_machine/
 - **Garbage Collection**: Safe removal of unreferenced objects with reference checking
 - **Automatic Cleanup**: Temporary preview directories are automatically cleaned up to prevent repository size growth
 - **Logging**: Comprehensive logging system for debugging and error tracking
+- **Mesh Diff**: Analytical comparison of mesh geometry and materials
+  - Vertex matching with tolerance-based comparison
+  - Face topology comparison
+  - Material and texture diff analysis
+  - Vertex color visualization for change highlighting
 
 ## License
 

@@ -234,6 +234,7 @@ These operations overwrite the working directory. Unsaved changes will be lost.
 2. Choose a `mesh_only` commit.
 3. Click **"Compare"**.
    - A comparison object appears in the scene.
+   - Diff is automatically computed and stored.
 
 **Controls:**
 - **X, Y, Z buttons**: Adjust offset along the selected axis.
@@ -242,6 +243,45 @@ These operations overwrite the working directory. Unsaved changes will be lost.
 **Comparison Mode:**
 - While the comparison object is active, other operations (commits, branches) are disabled.
 - Only viewing and axis offset adjustments are allowed.
+
+### Mesh Diff Analysis
+
+**How to use:**
+1. Select a mesh in the scene.
+2. Open the **"Mesh Diff"** panel (4th panel in Difference Machine tab).
+3. If diff is not computed yet:
+   - Select a commit from the list (last 5 commits shown).
+   - Click **"Compare"** next to the commit.
+   - Diff will be computed between current mesh and commit version.
+4. View statistics:
+   - **Geometry Changes**: Added/removed/modified vertices and faces count.
+   - **Change Percentage**: How much geometry changed (0-100%).
+   - **Displacement Metrics**: Maximum and average vertex displacement.
+   - **Material Changes**: Texture and node changes (if any).
+
+**Visualization:**
+1. After computing diff, select a color scheme:
+   - **Displacement**: Color by vertex displacement magnitude (red = more changes, green = less).
+   - **Added**: Green for added vertices.
+   - **Removed**: Red for removed vertices.
+   - **Modified**: Yellow for modified vertices.
+2. Click **"Apply Visualization"**.
+   - Viewport switches to vertex color display mode.
+   - Materials are temporarily hidden to show vertex colors.
+   - Changes are highlighted according to selected scheme.
+
+**Important Notes:**
+- **Materials**: When vertex color visualization is active, materials are hidden. To see materials again:
+  - Click **"Clear Diff"** to remove visualization, or
+  - Manually switch viewport color mode: Press `N` → Viewport Shading → Color → `Material`.
+- **Diff Data**: Diff statistics are stored in scene properties and persist until cleared.
+- **Comparison Integration**: When using "Compare" button in Load Commit panel, diff is automatically computed.
+
+**Clearing Diff:**
+- Click **"Clear Diff"** button to remove:
+  - Diff statistics
+  - Vertex color visualization
+  - Restore material display
 
 ### Project Comparison
 
