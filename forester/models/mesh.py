@@ -6,7 +6,7 @@ Represents a 3D mesh stored in the repository.
 import json
 from pathlib import Path
 from typing import Optional, Dict, Any
-from ..core.hashing import compute_hash
+from ..core.hashing import compute_hash, compute_file_hash
 from ..core.database import ForesterDB
 from ..core.storage import ObjectStorage
 
@@ -16,36 +16,48 @@ class Mesh:
     Represents a mesh in Forester repository.
     """
 
-    def __init__(self, hash: str, mesh_json: Dict[str, Any],
-                 material_json: Dict[str, Any], created_at: int = None):
+    def __init__(self, hash: str, blend_path: Path, metadata: Dict[str, Any], created_at: int = None):
         """
         Initialize mesh.
 
         Args:
             hash: SHA-256 hash of the mesh
-            mesh_json: Mesh data (vertices, faces, UV, normals, etc.)
-            material_json: Material data
+            blend_path: Path to .blend file
+            metadata: Metadata dict with mesh_json, material_json
             created_at: Creation timestamp (optional)
         """
         self.hash = hash
-        self.mesh_json = mesh_json
-        self.material_json = material_json
+        self.blend_path = blend_path
+        self.metadata = metadata
         self.created_at = created_at
+
+    @property
+    def mesh_json(self) -> Dict[str, Any]:
+        """Get mesh JSON from metadata."""
+        return self.metadata.get('mesh_json', {})
+
+    @property
+    def material_json(self) -> Dict[str, Any]:
+        """Get material JSON from metadata."""
+        return self.metadata.get('material_json', {})
 
     def compute_hash(self) -> str:
         """
-        Compute hash of the mesh based on its JSON data.
+        Compute hash from .blend file + metadata.
 
         Returns:
             SHA-256 hash string
         """
-        # Combine mesh and material JSON
-        combined = {
-            "mesh": self.mesh_json,
-            "material": self.material_json
-        }
-        combined_json = json.dumps(combined, sort_keys=True)
-        return compute_hash(combined_json.encode('utf-8'))
+        # Читаем .blend файл
+        if not self.blend_path.exists():
+            raise FileNotFoundError(f"Blend file not found: {self.blend_path}")
+        
+        blend_hash = compute_file_hash(self.blend_path)
+        
+        # Комбинируем с метаданными
+        metadata_json = json.dumps(self.metadata, sort_keys=True)
+        combined = blend_hash + metadata_json
+        return compute_hash(combined.encode('utf-8'))
 
     @classmethod
     def from_json_files(cls, mesh_json_path: Path, material_json_path: Path,
@@ -120,7 +132,7 @@ class Mesh:
     def from_directory(cls, mesh_dir: Path, base_dir: Path, db: ForesterDB,
                        storage: ObjectStorage) -> Optional['Mesh']:
         """
-        Create mesh from directory containing mesh.json and material.json.
+        Create mesh from directory containing mesh.blend and mesh_metadata.json.
 
         Args:
             mesh_dir: Directory containing mesh files
@@ -131,13 +143,16 @@ class Mesh:
         Returns:
             Mesh instance or None if files not found
         """
-        mesh_json_path = mesh_dir / "mesh.json"
-        material_json_path = mesh_dir / "material.json"
+        blend_path = mesh_dir / "mesh.blend"
+        metadata_path = mesh_dir / "mesh_metadata.json"
 
-        if not mesh_json_path.exists():
+        if not blend_path.exists() or not metadata_path.exists():
             return None
 
-        return cls.from_json_files(mesh_json_path, material_json_path, base_dir, db, storage)
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            metadata = json.load(f)
+
+        return cls.from_blend_file(blend_path, metadata, base_dir, db, storage)
 
     @classmethod
     def from_storage(cls, mesh_hash: str, db: ForesterDB,
@@ -161,8 +176,8 @@ class Mesh:
 
         return cls(
             hash=mesh_info['hash'],
-            mesh_json=mesh_data['mesh_json'],
-            material_json=mesh_data['material_json'],
+            blend_path=Path(mesh_data['blend_path']),
+            metadata=mesh_data['metadata'],
             created_at=mesh_info.get('created_at')
         )
 
@@ -175,8 +190,8 @@ class Mesh:
         """
         return {
             "hash": self.hash,
-            "mesh_json": self.mesh_json,
-            "material_json": self.material_json,
+            "blend_path": str(self.blend_path),
+            "metadata": self.metadata,
             "created_at": self.created_at
         }
 
@@ -193,8 +208,8 @@ class Mesh:
         """
         return cls(
             hash=data.get('hash', ''),
-            mesh_json=data.get('mesh_json', {}),
-            material_json=data.get('material_json', {}),
+            blend_path=Path(data.get('blend_path', '')),
+            metadata=data.get('metadata', {}),
             created_at=data.get('created_at')
         )
 

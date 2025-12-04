@@ -217,15 +217,39 @@ class DF_OT_create_mesh_commit(Operator):
         # Export meshes sequentially using single-mesh export function from mesh_io
         # Each mesh is processed one at a time to avoid conflicts and ensure proper error handling
         mesh_data_list = []
-        for obj in selected_objects:
-            try:
-                # Use single-mesh export function from mesh_io.py
-                mesh_data = export_mesh_to_json(obj, export_options)
-                mesh_data['mesh_name'] = obj.name
-                mesh_data_list.append(mesh_data)
-            except Exception as e:
-                self.report({'WARNING'}, f"Failed to export {obj.name}: {str(e)}")
-                continue
+        import tempfile
+        temp_dir = Path(tempfile.mkdtemp(prefix="dfm_mesh_export_"))
+        
+        try:
+            for obj in selected_objects:
+                # ВАЖНО: Сохраняем имя объекта ДО экспорта
+                # потому что export_mesh_to_blend может очистить сцену
+                obj_name = obj.name
+                
+                try:
+                    # Use new export function that saves to .blend + metadata
+                    from ..operators.mesh_io import export_mesh_to_blend
+                    
+                    mesh_temp_dir = temp_dir / obj_name
+                    mesh_temp_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    blend_path, metadata = export_mesh_to_blend(obj, mesh_temp_dir, export_options)
+                    
+                    mesh_data = {
+                        'mesh_name': obj_name,  # Используем сохраненное имя
+                        'blend_path': str(blend_path),
+                        'metadata': metadata,
+                        'obj': obj  # Сохраняем ссылку на объект для обработки текстур
+                    }
+                    mesh_data_list.append(mesh_data)
+                except Exception as e:
+                    # Используем сохраненное имя для сообщения об ошибке
+                    self.report({'WARNING'}, f"Failed to export {obj_name}: {str(e)}")
+                    logger.error(f"Failed to export mesh {obj_name}: {e}", exc_info=True)
+                    continue
+        finally:
+            # Cleanup temp directory will be done after commit creation
+            pass
         
         if not mesh_data_list:
             self.report({'ERROR'}, "No meshes could be exported")

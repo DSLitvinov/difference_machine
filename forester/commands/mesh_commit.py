@@ -80,7 +80,7 @@ def _apply_material_update_hooks(material_json: Dict[str, Any], textures: List[D
 
 def create_mesh_only_commit(
     repo_path: Path,
-    mesh_data_list: List[Dict[str, Any]],  # List of {mesh_name, mesh_json, material_json}
+    mesh_data_list: List[Dict[str, Any]],  # List of {mesh_name, blend_path, metadata, obj}
     export_options: Dict[str, bool],
     message: str,
     author: str = "Unknown",
@@ -94,8 +94,9 @@ def create_mesh_only_commit(
         repo_path: Path to repository root
         mesh_data_list: List of mesh data dicts with keys:
             - mesh_name: str (object name from source application)
-            - mesh_json: dict (mesh data)
-            - material_json: dict (material data)
+            - blend_path: Path to .blend file
+            - metadata: dict with mesh_json, material_json (for diff and textures)
+            - obj: Blender object (for texture processing)
         export_options: Export options dict (vertices, faces, uv, normals, materials)
         message: Commit message
         author: Author name
@@ -165,8 +166,12 @@ def create_mesh_only_commit(
         # Process each mesh
         for mesh_data in mesh_data_list:
             mesh_name = mesh_data['mesh_name']
-            mesh_json = mesh_data['mesh_json']
-            material_json = mesh_data.get('material_json', {})
+            blend_path = Path(mesh_data['blend_path'])
+            metadata = mesh_data['metadata']
+            obj = mesh_data.get('obj')  # Blender object для обработки текстур
+            
+            mesh_json = metadata.get('mesh_json', {})
+            material_json = metadata.get('material_json', {})
 
             # Process textures - copy only changed ones
             if material_json and 'textures' in material_json:
@@ -203,23 +208,26 @@ def create_mesh_only_commit(
 
                 material_json['textures'] = processed_textures
 
-            # Filter mesh_json based on export_options
+            # Filter mesh_json based on export_options (для метаданных)
             filtered_mesh_json = filter_mesh_data(mesh_json, export_options)
+            
+            # Обновляем метаданные с отфильтрованными данными
+            filtered_metadata = metadata.copy()
+            filtered_metadata['mesh_json'] = filtered_mesh_json
 
-            # Create mesh object
-            combined = {
-                "mesh": filtered_mesh_json,
-                "material": material_json
-            }
-            combined_json = json.dumps(combined, sort_keys=True)
-            mesh_hash = compute_hash(combined_json.encode('utf-8'))
+            # Compute hash from blend file + metadata
+            from ..core.hashing import compute_file_hash
+            blend_hash = compute_file_hash(blend_path)
+            metadata_json = json.dumps(filtered_metadata, sort_keys=True)
+            combined = blend_hash + metadata_json
+            mesh_hash = compute_hash(combined.encode('utf-8'))
 
             # Check if mesh already exists
             if not db.mesh_exists(mesh_hash):
-                # Save mesh to storage
+                # Save mesh to storage (blend file + metadata)
                 mesh_storage_data = {
-                    "mesh_json": filtered_mesh_json,
-                    "material_json": material_json
+                    "blend_path": str(blend_path),
+                    "metadata": filtered_metadata
                 }
                 storage_path = storage.save_mesh(mesh_storage_data, mesh_hash)
 
@@ -276,11 +284,11 @@ def create_mesh_only_commit(
                             material_json['textures']
                         )
 
-                    # Update material.json with final texture info
-                    mesh_storage_data['material_json'] = material_json
-                    # Re-save mesh with updated texture info
-                    with open(storage_path / "material.json", 'w', encoding='utf-8') as f:
-                        json.dump(material_json, f, indent=2, ensure_ascii=False)
+                    # Update metadata with final texture info
+                    filtered_metadata['material_json'] = material_json
+                    # Re-save metadata with updated texture info
+                    with open(storage_path / "mesh_metadata.json", 'w', encoding='utf-8') as f:
+                        json.dump(filtered_metadata, f, indent=2, ensure_ascii=False)
 
                 # Add to database (only for new meshes)
                 import time
@@ -293,17 +301,19 @@ def create_mesh_only_commit(
                     created_at=created_at
                 )
             else:
-                # Mesh exists - load existing material.json and update node_data if needed
+                # Mesh exists - load existing metadata and update node_data if needed
                 mesh_info = db.get_mesh(mesh_hash)
                 storage_path = Path(mesh_info['path'])
 
                 # Check if textures need to be copied (they might have changed)
-                # Load existing material.json first to check existing textures
-                material_json_path = storage_path / "material.json"
+                # Load existing metadata first to check existing textures
+                metadata_path = storage_path / "mesh_metadata.json"
+                existing_metadata = None
                 existing_material_json = None
-                if material_json_path.exists():
-                    with open(material_json_path, 'r', encoding='utf-8') as f:
-                        existing_material_json = json.load(f)
+                if metadata_path.exists():
+                    with open(metadata_path, 'r', encoding='utf-8') as f:
+                        existing_metadata = json.load(f)
+                        existing_material_json = existing_metadata.get('material_json', {})
 
                 # Check and copy changed textures
                 if material_json and 'textures' in material_json and existing_material_json:
@@ -387,42 +397,46 @@ def create_mesh_only_commit(
                     
                     # Save updated material.json if it was modified
                     if updated_material_json != existing_material_json:
-                        with open(material_json_path, 'w', encoding='utf-8') as f:
-                            json.dump(updated_material_json, f, indent=2, ensure_ascii=False)
+                        # Update metadata with updated material_json
+                        if existing_metadata:
+                            existing_metadata['material_json'] = updated_material_json
+                            with open(metadata_path, 'w', encoding='utf-8') as f:
+                                json.dump(existing_metadata, f, indent=2, ensure_ascii=False)
 
             mesh_hashes.append(mesh_hash)
             selected_mesh_names.append(mesh_name)
 
-            # Create blobs for mesh.json and material.json files
+            # Create blobs for mesh.blend and mesh_metadata.json files
             # Use mesh_hash as directory name for uniqueness
             mesh_dir_name = mesh_hash[:16]  # Use first 16 chars of hash
 
-            # Create blob for mesh.json
-            mesh_json_bytes = json.dumps(filtered_mesh_json, indent=2, ensure_ascii=False).encode('utf-8')
-            mesh_json_hash = compute_hash(mesh_json_bytes)
-            mesh_json_blob = Blob.from_file_data(mesh_json_bytes, mesh_json_hash, dfm_dir, db, storage)
+            # Create blob for mesh.blend
+            with open(storage_path / "mesh.blend", 'rb') as f:
+                blend_data = f.read()
+            blend_hash = compute_hash(blend_data)
+            blend_blob = Blob.from_file_data(blend_data, blend_hash, dfm_dir, db, storage)
 
-            # Create blob for material.json
-            material_json_bytes = json.dumps(material_json, indent=2, ensure_ascii=False).encode('utf-8')
-            material_json_hash = compute_hash(material_json_bytes)
-            material_json_blob = Blob.from_file_data(material_json_bytes, material_json_hash, dfm_dir, db, storage)
+            # Create blob for mesh_metadata.json
+            metadata_bytes = json.dumps(filtered_metadata, indent=2, ensure_ascii=False).encode('utf-8')
+            metadata_hash = compute_hash(metadata_bytes)
+            metadata_blob = Blob.from_file_data(metadata_bytes, metadata_hash, dfm_dir, db, storage)
 
             # Add to tree entries
-            mesh_path = f"meshes/{mesh_dir_name}/mesh.json"
-            material_path = f"meshes/{mesh_dir_name}/material.json"
+            mesh_blend_path = f"meshes/{mesh_dir_name}/mesh.blend"
+            metadata_path = f"meshes/{mesh_dir_name}/mesh_metadata.json"
 
             tree_entries.append(TreeEntry(
-                path=mesh_path,
+                path=mesh_blend_path,
                 type="blob",
-                hash=mesh_json_blob.hash,
-                size=mesh_json_blob.size
+                hash=blend_blob.hash,
+                size=blend_blob.size
             ))
 
             tree_entries.append(TreeEntry(
-                path=material_path,
+                path=metadata_path,
                 type="blob",
-                hash=material_json_blob.hash,
-                size=material_json_blob.size
+                hash=metadata_blob.hash,
+                size=metadata_blob.size
             ))
 
         # Create tree object (only with mesh files)

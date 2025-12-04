@@ -34,6 +34,163 @@ NODE_TYPE_MAP = {
 
 # ========== EXPORT FUNCTIONS ==========
 
+def export_mesh_to_blend(obj, output_path: Path, export_options: Dict[str, bool]) -> Tuple[Path, Dict[str, Any]]:
+    """
+    Export mesh to .blend file + metadata JSON for diff and textures.
+    
+    Args:
+        obj: Blender mesh object
+        output_path: Directory to save mesh files
+        export_options: Export options (for filtering metadata)
+    
+    Returns:
+        Tuple of (blend_path, metadata_dict)
+    """
+    blend_path = output_path / "mesh.blend"
+    
+    # ВАЖНО: Сохраняем все данные объекта ДО вызова _save_mesh_to_blend
+    # потому что _save_mesh_to_blend вызывает read_homefile() который очищает сцену
+    obj_name = obj.name
+    
+    # ВАЖНО: Извлекаем JSON для diff ДО сохранения .blend файла
+    # потому что _save_mesh_to_blend вызывает read_homefile() который очищает сцену
+    mesh_json, material_json = export_mesh_to_json(obj, export_options)
+    
+    # Сохраняем .blend файл (это очистит сцену и сделает obj недействительным)
+    _save_mesh_to_blend(obj, blend_path)
+    
+    # ВАЖНО: Используем сохраненное obj_name, НЕ obj.name (obj уже недействителен!)
+    # Сохраняем метаданные
+    metadata = {
+        'mesh_json': mesh_json,  # Для diff
+        'material_json': material_json,  # Для diff и текстур
+        'object_name': obj_name,  # Используем сохраненное имя
+        'export_options': export_options,
+    }
+    
+    metadata_path = output_path / "mesh_metadata.json"
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
+    
+    return blend_path, metadata
+
+
+def _save_mesh_to_blend(obj, output_path: Path) -> None:
+    """
+    Save single mesh object to minimal .blend file.
+    
+    Uses bpy.data.libraries.write() to save data blocks without clearing scene,
+    then creates a new file and loads the library.
+    
+    Args:
+        obj: Blender mesh object to save
+        output_path: Path to save .blend file
+    """
+    import tempfile
+    
+    # Сохраняем все данные объекта ДО любых операций со сценой
+    obj_name = obj.name
+    obj_location = tuple(obj.location)
+    obj_rotation = tuple(obj.rotation_euler)
+    obj_scale = tuple(obj.scale)
+    
+    # Сохраняем оригинальный файл
+    original_file = bpy.data.filepath
+    
+    # Создаем временный файл для сохранения библиотеки
+    temp_lib_path = Path(tempfile.mktemp(suffix='.blend'))
+    
+    try:
+        # Собираем все данные для сохранения в SET
+        # ВАЖНО: Делаем это ДО вызова read_homefile()
+        data_blocks_to_save = set()
+        data_blocks_to_save.add(obj)
+        data_blocks_to_save.add(obj.data)
+        
+        # Добавляем материалы и их зависимости
+        if obj.material_slots:
+            for slot in obj.material_slots:
+                if slot.material:
+                    data_blocks_to_save.add(slot.material)
+                    # Добавляем node tree если есть
+                    if slot.material.use_nodes and slot.material.node_tree:
+                        data_blocks_to_save.add(slot.material.node_tree)
+                        # Добавляем все изображения из node tree
+                        for node in slot.material.node_tree.nodes:
+                            if node.type == 'TEX_IMAGE' and node.image:
+                                data_blocks_to_save.add(node.image)
+        
+        # Сохраняем данные в библиотеку (БЕЗ очистки текущей сцены)
+        bpy.data.libraries.write(str(temp_lib_path), data_blocks_to_save, fake_user=True)
+        
+        # Теперь создаем новый файл и загружаем библиотеку
+        bpy.ops.wm.read_homefile(app_template="")
+        
+        # Загружаем библиотеку в новый файл
+        with bpy.data.libraries.load(str(temp_lib_path), link=False) as (data_from, data_to):
+            # Загружаем meshes
+            if data_from.meshes:
+                data_to.meshes = [data_from.meshes[0]]
+            
+            # Загружаем materials
+            if data_from.materials:
+                data_to.materials = data_from.materials
+            
+            # Загружаем node_groups если есть
+            if data_from.node_groups:
+                data_to.node_groups = data_from.node_groups
+            
+            # Загружаем images если есть
+            if data_from.images:
+                data_to.images = data_from.images
+        
+        # Создаем объект из загруженного mesh
+        # Используем сохраненные значения, НЕ ссылки на obj
+        if data_to.meshes:
+            loaded_mesh = data_to.meshes[0]
+            new_obj = bpy.data.objects.new(obj_name, loaded_mesh)
+            new_obj.location = obj_location
+            new_obj.rotation_euler = obj_rotation
+            new_obj.scale = obj_scale
+            
+            # Применяем материалы
+            if data_to.materials:
+                for mat in data_to.materials:
+                    loaded_mesh.materials.append(mat)
+            
+            # Добавляем в сцену
+            bpy.context.collection.objects.link(new_obj)
+            
+            # Выбираем объект
+            bpy.context.view_layer.objects.active = new_obj
+            new_obj.select_set(True)
+        
+        # Сохраняем файл
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        bpy.ops.wm.save_as_mainfile(filepath=str(output_path), check_existing=False)
+        
+    finally:
+        # Удаляем временный файл библиотеки
+        if temp_lib_path.exists():
+            try:
+                temp_lib_path.unlink()
+            except Exception as e:
+                logger.warning(f"Failed to delete temp library file: {e}")
+        
+        # Восстанавливаем оригинальный файл
+        try:
+            if original_file and Path(original_file).exists():
+                bpy.ops.wm.open_mainfile(filepath=original_file)
+            else:
+                bpy.ops.wm.read_homefile(app_template="")
+        except Exception as e:
+            logger.warning(f"Failed to restore original file: {e}", exc_info=True)
+            try:
+                bpy.ops.wm.read_homefile(app_template="")
+            except Exception:
+                pass
+
+
 def export_mesh_to_json(obj, export_options):
     """
     Export Blender mesh object to JSON format with texture tracking.
@@ -284,7 +441,8 @@ def _export_image_texture(node, node_data, texture_map):
         if texture_info:
             # Если текстура была скопирована в коммит, сохраняем путь
             if texture_info.get('copied') and texture_info.get('commit_path'):
-                commit_path = texture_info['commit_path']
+                # Убеждаемся что commit_path это строка, не PosixPath
+                commit_path = str(texture_info['commit_path'])
                 # Убираем префикс "textures/" если есть
                 if commit_path.startswith('textures/'):
                     commit_path = commit_path.replace('textures/', '', 1)
@@ -367,7 +525,49 @@ def get_socket_default_value(socket):
 
 # ========== IMPORT FUNCTIONS ==========
 
-def load_mesh_from_commit(repo_path: Path, commit_hash: str, mesh_name: str) -> Tuple[Optional[Dict], Optional[Dict], Optional[Path]]:
+def import_mesh_from_blend(blend_path: Path, mesh_name: str, context) -> Optional[bpy.types.Object]:
+    """
+    Import mesh from .blend file.
+    
+    Args:
+        blend_path: Path to .blend file
+        mesh_name: Name of mesh object to import
+        context: Blender context
+    
+    Returns:
+        Imported object or None
+    """
+    if not blend_path.exists():
+        logger.error(f"Blend file not found: {blend_path}")
+        return None
+    
+    try:
+        with bpy.data.libraries.load(str(blend_path), link=False) as (data_from, data_to):
+            if mesh_name in data_from.objects:
+                data_to.objects = [mesh_name]
+            else:
+                # Если имя не найдено, берем первый mesh объект
+                mesh_objects = [name for name in data_from.objects 
+                              if name in data_from.objects]
+                if mesh_objects:
+                    data_to.objects = [mesh_objects[0]]
+                else:
+                    logger.warning(f"Mesh '{mesh_name}' not found in {blend_path}")
+                    return None
+        
+        for obj in data_to.objects:
+            context.collection.objects.link(obj)
+            obj.select_set(True)
+            context.view_layer.objects.active = obj
+            return obj
+        
+        return None
+    except Exception as e:
+        logger.error(f"Failed to import mesh from blend: {e}", exc_info=True)
+        return None
+
+
+def load_mesh_from_commit(repo_path: Path, commit_hash: str, mesh_name: str) -> Tuple[Optional[Path], Optional[Dict], Optional[Path]]:
     """
     Load mesh from commit with storage path for texture loading.
     
@@ -394,42 +594,65 @@ def load_mesh_from_commit(repo_path: Path, commit_hash: str, mesh_name: str) -> 
         if not commit.mesh_hashes or not commit.selected_mesh_names:
             return None, None, None
         
-        # Find mesh by name
+        # Find mesh by name (exact match first, then try partial match)
         mesh_index = None
         for i, name in enumerate(commit.selected_mesh_names):
             if name == mesh_name:
                 mesh_index = i
                 break
         
-        if mesh_index is None or mesh_index >= len(commit.mesh_hashes):
+        # If exact match not found, try partial match (mesh_name contains name or vice versa)
+        if mesh_index is None:
+            for i, name in enumerate(commit.selected_mesh_names):
+                if mesh_name in name or name in mesh_name:
+                    logger.info(f"Found mesh by partial match: '{mesh_name}' matches '{name}'")
+                    mesh_index = i
+                    break
+        
+        # Log available mesh names for debugging
+        if mesh_index is None:
+            logger.warning(
+                f"Mesh '{mesh_name}' not found in commit {commit_hash[:16]}... "
+                f"Available meshes: {commit.selected_mesh_names}"
+            )
+            return None, None, None
+        
+        if mesh_index >= len(commit.mesh_hashes):
+            logger.error(f"Mesh index {mesh_index} out of range for {len(commit.mesh_hashes)} meshes")
             return None, None, None
         
         mesh_hash = commit.mesh_hashes[mesh_index]
-        mesh = Mesh.from_storage(mesh_hash, db, storage)
         
-        if not mesh:
-            return None, None, None
-        
-        # Get storage path for texture loading
+        # Get storage path directly from database
         mesh_info = db.get_mesh(mesh_hash)
         mesh_storage_path = Path(mesh_info['path']) if mesh_info else None
         
-        # Ensure material_json has updated node_data with texture info
-        # This is needed because material.json might have been saved before node_data was updated
-        if mesh_storage_path and mesh.material_json:
-            material_json_path = mesh_storage_path / "material.json"
-            if material_json_path.exists():
-                # Reload material.json from disk to get latest version with updated node_data
-                try:
-                    with open(material_json_path, 'r', encoding='utf-8') as f:
-                        updated_material_json = json.load(f)
-                    # Use updated version if it has node_tree
-                    if 'node_tree' in updated_material_json:
-                        mesh.material_json = updated_material_json
-                except Exception as e:
-                    logger.warning(f"Could not reload material.json: {e}")
+        if not mesh_storage_path:
+            logger.error(f"Mesh storage path not found for {mesh_hash[:16]}...")
+            return None, None, None
         
-        return mesh.mesh_json, mesh.material_json, mesh_storage_path
+        # Load blend file and metadata
+        blend_path = mesh_storage_path / "mesh.blend"
+        metadata_path = mesh_storage_path / "mesh_metadata.json"
+        
+        if not blend_path.exists() or not metadata_path.exists():
+            logger.error(f"Mesh files not found: {blend_path} or {metadata_path}")
+            return None, None, None
+        
+        # Load metadata
+        try:
+            with open(metadata_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load metadata: {e}", exc_info=True)
+            return None, None, None
+        
+        # Get actual mesh name from metadata (may differ from requested name)
+        actual_mesh_name = metadata.get('object_name', commit.selected_mesh_names[mesh_index])
+        
+        logger.info(f"Loading mesh '{actual_mesh_name}' (requested: '{mesh_name}') from {blend_path}")
+        
+        return blend_path, metadata, mesh_storage_path
     finally:
         db.close()
 
@@ -723,7 +946,8 @@ def _import_image_texture(node, node_data, texture_map, textures_dir):
     if texture_info:
         if textures_dir:
             if texture_info.get('copied') and texture_info.get('commit_path'):
-                commit_path = texture_info['commit_path']
+                # Убеждаемся что commit_path это строка, не PosixPath
+                commit_path = str(texture_info['commit_path'])
                 if commit_path.startswith('textures/'):
                     commit_path = commit_path.replace('textures/', '', 1)
                 candidate_paths.append(str(textures_dir / commit_path))
@@ -925,11 +1149,17 @@ def load_textures_to_material(material, textures_info, mesh_storage_path):
         texture_path = None
         if texture_info.get('copied') and texture_info.get('commit_path'):
             # Текстура скопирована в коммит
-            texture_path = mesh_storage_path / texture_info['commit_path']
+            # Убеждаемся что commit_path это строка, не PosixPath
+            commit_path = str(texture_info['commit_path'])
+            # Убираем префикс "textures/" если есть
+            if commit_path.startswith('textures/'):
+                commit_path = commit_path.replace('textures/', '', 1)
+            texture_path = mesh_storage_path / commit_path
             logger.debug(f"Using copied texture path: {texture_path}")
         elif texture_info.get('original_path'):
             # Используем оригинальный путь
-            texture_path = Path(bpy.path.abspath(texture_info['original_path']))
+            original_path = str(texture_info['original_path'])
+            texture_path = Path(bpy.path.abspath(original_path))
             logger.debug(f"Using original texture path: {texture_path}")
         
         # Загружаем текстуру
@@ -1007,7 +1237,8 @@ def update_blender_node_tree(material_json: Dict[str, Any], textures: List[Dict[
                 # Add copied_texture and image_file to node_data
                 if texture_info.get('copied') and texture_info.get('commit_path'):
                     # Save only filename (remove "textures/" prefix if present)
-                    commit_path = texture_info['commit_path']
+                    # Убеждаемся что commit_path это строка, не PosixPath
+                    commit_path = str(texture_info['commit_path'])
                     if commit_path.startswith('textures/'):
                         commit_path = commit_path.replace('textures/', '', 1)
                     node_data['copied_texture'] = commit_path

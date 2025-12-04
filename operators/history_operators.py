@@ -532,15 +532,28 @@ class DF_OT_load_mesh_version(Operator):
         
         # Load mesh from commit
         try:
-            mesh_json, material_json, mesh_storage_path = load_mesh_from_commit(repo_path, self.commit_hash, self.mesh_name)
+            blend_path, metadata, mesh_storage_path = load_mesh_from_commit(repo_path, self.commit_hash, self.mesh_name)
             
-            if not mesh_json:
+            if not blend_path:
                 self.report({'ERROR'}, f"Mesh '{self.mesh_name}' not found in commit")
                 return {'CANCELLED'}
             
-            # Import to Blender (always create new object for Load)
-            obj = import_mesh_to_blender(context, mesh_json, material_json, self.mesh_name, mode='NEW', 
-                                      mesh_storage_path=mesh_storage_path)
+            # Import from .blend file
+            # Используем имя из metadata, так как оно может отличаться от mesh_name
+            actual_mesh_name = metadata.get('object_name', self.mesh_name)
+            from ..operators.mesh_io import import_mesh_from_blend
+            obj = import_mesh_from_blend(blend_path, actual_mesh_name, context)
+            
+            if not obj:
+                self.report({'ERROR'}, f"Failed to load mesh from .blend file")
+                return {'CANCELLED'}
+            
+            # Load textures from metadata
+            material_json = metadata.get('material_json', {})
+            if material_json and 'textures' in material_json and mesh_storage_path:
+                from ..operators.mesh_io import load_textures_to_material
+                if obj.material_slots and obj.material_slots[0].material:
+                    load_textures_to_material(obj.material_slots[0].material, material_json['textures'], mesh_storage_path)
             
             self.report({'INFO'}, f"Loaded mesh '{self.mesh_name}' from commit")
             return {'FINISHED'}
@@ -620,15 +633,48 @@ class DF_OT_replace_mesh(Operator):
         
         # Load mesh from commit
         try:
-            mesh_json, material_json, mesh_storage_path = load_mesh_from_commit(repo_path, self.commit_hash, mesh_name)
+            blend_path, metadata, mesh_storage_path = load_mesh_from_commit(repo_path, self.commit_hash, mesh_name)
             
-            if not mesh_json:
+            if not blend_path:
                 self.report({'ERROR'}, f"Mesh '{mesh_name}' not found in commit")
                 return {'CANCELLED'}
             
-            # Import to Blender (replace mode)
-            import_mesh_to_blender(context, mesh_json, material_json, mesh_name, mode='SELECTED', 
-                                 mesh_storage_path=mesh_storage_path)
+            # Import from .blend file and replace selected object
+            # Используем имя из metadata, так как оно может отличаться от mesh_name
+            actual_mesh_name = metadata.get('object_name', mesh_name)
+            from ..operators.mesh_io import import_mesh_from_blend
+            
+            # Сначала загружаем объект из .blend
+            imported_obj = import_mesh_from_blend(blend_path, actual_mesh_name, context)
+            
+            if not imported_obj:
+                self.report({'ERROR'}, f"Failed to load mesh from .blend file")
+                return {'CANCELLED'}
+            
+            # Копируем данные в выбранный объект
+            active_obj = context.active_object
+            if active_obj and active_obj.type == 'MESH':
+                # Копируем mesh data
+                active_obj.data = imported_obj.data.copy()
+                # Копируем материалы
+                # Очищаем материалы через data.materials (material_slots не поддерживает clear)
+                active_obj.data.materials.clear()
+                for slot in imported_obj.material_slots:
+                    if slot.material:
+                        active_obj.data.materials.append(slot.material)
+                
+                # Удаляем импортированный объект
+                bpy.data.objects.remove(imported_obj, do_unlink=True)
+                
+                # Загружаем текстуры
+                material_json = metadata.get('material_json', {})
+                if material_json and 'textures' in material_json and mesh_storage_path:
+                    from ..operators.mesh_io import load_textures_to_material
+                    if active_obj.material_slots and active_obj.material_slots[0].material:
+                        load_textures_to_material(active_obj.material_slots[0].material, material_json['textures'], mesh_storage_path)
+            else:
+                # Если нет активного объекта, просто используем импортированный
+                pass
             
             self.report({'INFO'}, f"Replaced mesh '{mesh_name}' with version from commit")
             return {'FINISHED'}
@@ -717,20 +763,67 @@ class DF_OT_compare_mesh(Operator):
         
         # Load mesh from commit
         try:
-            mesh_json, material_json, mesh_storage_path = load_mesh_from_commit(repo_path, self.commit_hash, mesh_name)
+            blend_path, metadata, mesh_storage_path = load_mesh_from_commit(repo_path, self.commit_hash, mesh_name)
             
-            if not mesh_json:
+            if not blend_path:
                 self.report({'ERROR'}, f"Mesh '{mesh_name}' not found in commit")
                 return {'CANCELLED'}
             
-            # Import to Blender (new object for comparison)
-            # Create material with "_compare_" prefix to avoid conflicts
-            comparison_obj = import_mesh_to_blender(
-                context, mesh_json, material_json, 
-                f"{mesh_name}_compare", mode='NEW',
-                mesh_storage_path=mesh_storage_path,
-                material_prefix="_compare_"
-            )
+            # Import from .blend file
+            # Используем имя из metadata, так как оно может отличаться от mesh_name
+            actual_mesh_name = metadata.get('object_name', mesh_name)
+            from ..operators.mesh_io import import_mesh_from_blend
+            comparison_obj = import_mesh_from_blend(blend_path, actual_mesh_name, context)
+            
+            if not comparison_obj:
+                self.report({'ERROR'}, f"Failed to load mesh from .blend file")
+                return {'CANCELLED'}
+            
+            # Переименовываем для сравнения
+            comparison_obj.name = f"{mesh_name}_compare"
+            
+            # Загружаем текстуры из метаданных
+            material_json = metadata.get('material_json', {})
+            
+            # Если material_json это строка, парсим её
+            if isinstance(material_json, str):
+                try:
+                    import json
+                    material_json = json.loads(material_json) if material_json else {}
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.warning(f"Failed to parse material_json as JSON: {e}")
+                    material_json = {}
+            
+            logger.debug(f"Compare mesh: material_json type={type(material_json)}, has textures={'textures' in material_json if isinstance(material_json, dict) else False}")
+            logger.debug(f"Compare mesh: mesh_storage_path={mesh_storage_path}")
+            
+            if material_json and isinstance(material_json, dict) and 'textures' in material_json and mesh_storage_path:
+                textures_list = material_json['textures']
+                if not isinstance(textures_list, list):
+                    logger.warning(f"Compare mesh: textures is not a list, type={type(textures_list)}")
+                    textures_list = []
+                else:
+                    logger.debug(f"Compare mesh: Found {len(textures_list)} textures to load")
+                
+                from ..operators.mesh_io import load_textures_to_material
+                if comparison_obj.material_slots and len(comparison_obj.material_slots) > 0:
+                    mat = comparison_obj.material_slots[0].material
+                    if mat:
+                        # Создаем материал с префиксом для сравнения (если еще не создан)
+                        if not mat.name.startswith("_compare_"):
+                            new_mat = mat.copy()
+                            new_mat.name = f"_compare_{mat.name}"
+                            comparison_obj.data.materials[0] = new_mat
+                            mat = new_mat
+                        
+                        logger.debug(f"Compare mesh: Loading textures to material '{mat.name}'")
+                        load_textures_to_material(mat, textures_list, mesh_storage_path)
+                    else:
+                        logger.warning("Compare mesh: Material slot has no material")
+                else:
+                    logger.warning("Compare mesh: No material slots found")
+            else:
+                logger.warning(f"Compare mesh: Cannot load textures - material_json={bool(material_json)}, is_dict={isinstance(material_json, dict) if material_json else False}, has_textures={'textures' in material_json if isinstance(material_json, dict) else False}, mesh_storage_path={bool(mesh_storage_path)}")
             
             # Offset comparison object based on selected axis
             comparison_obj.location.x = original_obj.location.x
@@ -867,23 +960,40 @@ class DF_OT_switch_comparison_axis(Operator):
         
         # Load mesh from commit
         try:
-            mesh_json, material_json, mesh_storage_path = load_mesh_from_commit(repo_path, commit_hash, mesh_name)
+            blend_path, metadata, mesh_storage_path = load_mesh_from_commit(repo_path, commit_hash, mesh_name)
             
-            if not mesh_json:
+            if not blend_path:
                 self.report({'ERROR'}, f"Mesh '{mesh_name}' not found in commit")
                 return {'CANCELLED'}
             
             # Remove old comparison object
             bpy.data.objects.remove(comparison_obj, do_unlink=True)
             
-            # Import to Blender (new object for comparison)
-            # Create material with "_compare_" prefix to avoid conflicts
-            comparison_obj = import_mesh_to_blender(
-                context, mesh_json, material_json, 
-                f"{mesh_name}_compare", mode='NEW',
-                mesh_storage_path=mesh_storage_path,
-                material_prefix="_compare_"
-            )
+            # Import from .blend file
+            # Используем имя из metadata, так как оно может отличаться от mesh_name
+            actual_mesh_name = metadata.get('object_name', mesh_name)
+            from ..operators.mesh_io import import_mesh_from_blend
+            comparison_obj = import_mesh_from_blend(blend_path, actual_mesh_name, context)
+            
+            if not comparison_obj:
+                self.report({'ERROR'}, f"Failed to load mesh from .blend file")
+                return {'CANCELLED'}
+            
+            # Переименовываем для сравнения
+            comparison_obj.name = f"{mesh_name}_compare"
+            
+            # Загружаем текстуры из метаданных
+            material_json = metadata.get('material_json', {})
+            if material_json and 'textures' in material_json and mesh_storage_path:
+                from ..operators.mesh_io import load_textures_to_material
+                if comparison_obj.material_slots and comparison_obj.material_slots[0].material:
+                    # Создаем материал с префиксом для сравнения
+                    mat = comparison_obj.material_slots[0].material
+                    if not mat.name.startswith("_compare_"):
+                        new_mat = mat.copy()
+                        new_mat.name = f"_compare_{mat.name}"
+                        comparison_obj.data.materials[0] = new_mat
+                        load_textures_to_material(new_mat, material_json['textures'], mesh_storage_path)
             
             # Offset comparison object based on selected axis
             comparison_obj.location.x = original_obj.location.x

@@ -307,16 +307,31 @@ def restore_meshes_from_mesh_only_commit(commit: Commit, working_dir: Path,
             mesh_dir = meshes_dir / mesh_dir_name
             mesh_dir.mkdir(exist_ok=True)
 
-            # Save mesh.json
-            import json
-            mesh_json_path = mesh_dir / "mesh.json"
-            with open(mesh_json_path, 'w', encoding='utf-8') as f:
-                json.dump(mesh.mesh_json, f, indent=2, ensure_ascii=False)
+            # Copy mesh.blend file
+            import shutil
+            mesh_info = db.get_mesh(mesh_hash)
+            if mesh_info:
+                storage_path = Path(mesh_info['path'])
+                blend_source = storage_path / "mesh.blend"
+                if blend_source.exists():
+                    shutil.copy2(blend_source, mesh_dir / "mesh.blend")
+                else:
+                    logger.warning(f"mesh.blend not found for {mesh_name}, skipping")
+                    continue
+            else:
+                logger.warning(f"Mesh info not found for {mesh_name}, skipping")
+                continue
 
-            # Save material.json
-            material_json_path = mesh_dir / "material.json"
-            with open(material_json_path, 'w', encoding='utf-8') as f:
-                json.dump(mesh.material_json, f, indent=2, ensure_ascii=False)
+            # Save mesh_metadata.json (for diff and textures)
+            import json
+            metadata_path = mesh_dir / "mesh_metadata.json"
+            metadata = {
+                'mesh_json': mesh.mesh_json,
+                'material_json': mesh.material_json,
+                'object_name': mesh_name,
+            }
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
 
         except FileNotFoundError as e:
             logger.warning(f"{e}, skipping mesh {mesh_name}")

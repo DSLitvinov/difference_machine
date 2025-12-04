@@ -214,10 +214,12 @@ class ObjectStorage:
 
     def save_mesh(self, mesh_data: Dict[str, Any], mesh_hash: str) -> Path:
         """
-        Save mesh to storage.
+        Save mesh to storage - новый формат (.blend + metadata).
 
         Args:
-            mesh_data: Mesh data with 'mesh_json' and 'material_json' keys
+            mesh_data: Dict with keys:
+                - 'blend_path': Path to .blend file
+                - 'metadata': Dict with mesh_json, material_json
             mesh_hash: SHA-256 hash of the mesh
 
         Returns:
@@ -226,27 +228,29 @@ class ObjectStorage:
         mesh_dir = hash_to_path(mesh_hash, self.base_dir, "meshes")
         mesh_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save mesh.json
-        mesh_json_path = mesh_dir / "mesh.json"
-        with open(mesh_json_path, 'w', encoding='utf-8') as f:
-            json.dump(mesh_data.get('mesh_json', {}), f, indent=2, ensure_ascii=False)
+        # Копируем .blend файл
+        blend_path = Path(mesh_data['blend_path'])
+        if blend_path.exists():
+            shutil.copy2(blend_path, mesh_dir / "mesh.blend")
+        else:
+            raise FileNotFoundError(f"Blend file not found: {blend_path}")
 
-        # Save material.json
-        material_json_path = mesh_dir / "material.json"
-        with open(material_json_path, 'w', encoding='utf-8') as f:
-            json.dump(mesh_data.get('material_json', {}), f, indent=2, ensure_ascii=False)
+        # Сохраняем метаданные
+        metadata_path = mesh_dir / "mesh_metadata.json"
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(mesh_data['metadata'], f, indent=2, ensure_ascii=False)
 
         return mesh_dir
 
     def load_mesh(self, mesh_hash: str) -> Dict[str, Any]:
         """
-        Load mesh from storage.
+        Load mesh metadata from storage.
 
         Args:
             mesh_hash: SHA-256 hash of the mesh
 
         Returns:
-            Dictionary with 'mesh_json' and 'material_json' keys
+            Dict with 'blend_path' and 'metadata' keys
 
         Raises:
             FileNotFoundError: If mesh doesn't exist
@@ -256,30 +260,27 @@ class ObjectStorage:
         if not mesh_dir.exists():
             raise FileNotFoundError(f"Mesh not found: {mesh_hash}")
 
-        # Load mesh.json
-        mesh_json_path = mesh_dir / "mesh.json"
-        if not mesh_json_path.exists():
-            raise FileNotFoundError(f"mesh.json not found for mesh: {mesh_hash}")
+        blend_path = mesh_dir / "mesh.blend"
+        metadata_path = mesh_dir / "mesh_metadata.json"
 
-        with open(mesh_json_path, 'r', encoding='utf-8') as f:
-            mesh_json = json.load(f)
+        if not blend_path.exists() or not metadata_path.exists():
+            raise FileNotFoundError(f"Mesh files not found for: {mesh_hash}")
 
-        # Load material.json
-        material_json_path = mesh_dir / "material.json"
-        material_json = {}
-        if material_json_path.exists():
-            with open(material_json_path, 'r', encoding='utf-8') as f:
-                material_json = json.load(f)
+        # Загружаем метаданные
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            metadata = json.load(f)
 
         return {
-            'mesh_json': mesh_json,
-            'material_json': material_json,
+            'blend_path': str(blend_path),
+            'metadata': metadata
         }
 
     def mesh_exists(self, mesh_hash: str) -> bool:
         """Check if mesh exists in storage."""
         mesh_dir = hash_to_path(mesh_hash, self.base_dir, "meshes")
-        return mesh_dir.exists() and (mesh_dir / "mesh.json").exists()
+        return (mesh_dir.exists() and 
+                (mesh_dir / "mesh.blend").exists() and 
+                (mesh_dir / "mesh_metadata.json").exists())
 
     def delete_mesh(self, mesh_hash: str) -> None:
         """Delete mesh from storage."""
