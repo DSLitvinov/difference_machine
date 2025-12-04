@@ -21,7 +21,7 @@ def get_current_branch_name(context):
         if repo_path:
             branch_name = get_current_branch(repo_path)
             return branch_name if branch_name else "main"
-    except:
+    except Exception:
         pass
     
     # Fallback to props or default
@@ -217,7 +217,7 @@ class DF_PT_branch_panel(Panel):
             # Try to auto-load
             try:
                 bpy.ops.df.refresh_branches()
-            except:
+            except Exception:
                 pass
         
         # List branches using UIList (only if repo initialized)
@@ -339,7 +339,7 @@ class DF_PT_history_panel(Panel):
             # Try to auto-load
             try:
                 bpy.ops.df.refresh_history()
-            except:
+            except Exception:
                 pass
         
         # List commits using UIList

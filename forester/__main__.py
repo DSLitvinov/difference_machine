@@ -467,7 +467,7 @@ def cmd_log(args):
                         import json
                         try:
                             mesh_names = json.loads(mesh_names)
-                        except:
+                        except (json.JSONDecodeError, TypeError):
                             mesh_names = [mesh_names]
                     if mesh_names:
                         print(f"    Meshes: {', '.join(mesh_names)}")

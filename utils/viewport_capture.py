@@ -87,7 +87,7 @@ def capture_viewport_screenshot(context) -> Optional[bytes]:
                 logger.warning(f"Screenshot file is empty: {temp_file}")
                 try:
                     os.remove(temp_file)
-                except:
+                except OSError:
                     pass
                 return None
             
@@ -117,7 +117,7 @@ def capture_viewport_screenshot(context) -> Optional[bytes]:
             try:
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
-            except:
+            except OSError:
                 pass
             return None
             

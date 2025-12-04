@@ -342,10 +342,7 @@ class DF_OT_compare_project(Operator):
             from ..forester.commands.checkout import restore_files_from_tree, restore_meshes_from_commit
             
             db_path = dfm_dir / "forester.db"
-            db = ForesterDB(db_path)
-            db.connect()
-            
-            try:
+            with ForesterDB(db_path) as db:
                 storage = ObjectStorage(dfm_dir)
                 commit = Commit.from_storage(self.commit_hash, db, storage)
                 
@@ -373,9 +370,6 @@ class DF_OT_compare_project(Operator):
 
                 # Restore meshes from commit (mesh-only data, if present)
                 restore_meshes_from_commit(commit, temp_working_dir, storage, dfm_dir)
-                
-            finally:
-                db.close()
             
         except (ValueError, FileNotFoundError) as e:
             self.report({'ERROR'}, f"Failed to checkout commit: {str(e)}")

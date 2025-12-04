@@ -147,7 +147,7 @@ class DFCommitProperties(bpy.types.PropertyGroup):
         def refresh_after_update():
             try:
                 bpy.ops.df.refresh_history()
-            except:
+            except Exception:
                 pass  # Silently fail if can't refresh
         
         # Schedule refresh for next frame
@@ -372,94 +372,94 @@ def unregister():
     if hasattr(bpy.types.Scene, 'df_commits'):
         try:
             del bpy.types.Scene.df_commits
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_branches'):
         try:
             del bpy.types.Scene.df_branches
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_branch_list_index'):
         try:
             del bpy.types.Scene.df_branch_list_index
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_commit_list_index'):
         try:
             del bpy.types.Scene.df_commit_list_index
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_commit_props'):
         try:
             del bpy.types.Scene.df_commit_props
-        except:
+        except Exception:
             pass
     
     # Unregister comparison properties
     if hasattr(bpy.types.Scene, 'df_comparison_active'):
         try:
             del bpy.types.Scene.df_comparison_active
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_comparison_object_name'):
         try:
             del bpy.types.Scene.df_comparison_object_name
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_original_object_name'):
         try:
             del bpy.types.Scene.df_original_object_name
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_comparison_commit_hash'):
         try:
             del bpy.types.Scene.df_comparison_commit_hash
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_comparison_axis'):
         try:
             del bpy.types.Scene.df_comparison_axis
-        except:
+        except Exception:
             pass
     
     # Unregister project comparison properties
     if hasattr(bpy.types.Scene, 'df_project_comparison_active'):
         try:
             del bpy.types.Scene.df_project_comparison_active
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_project_comparison_commit_hash'):
         try:
             del bpy.types.Scene.df_project_comparison_commit_hash
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_project_comparison_temp_dir'):
         try:
             del bpy.types.Scene.df_project_comparison_temp_dir
-        except:
+        except Exception:
             pass
     
     # Unregister preview properties
     if hasattr(bpy.types.Scene, 'df_preview_temp_dir'):
         try:
             del bpy.types.Scene.df_preview_temp_dir
-        except:
+        except Exception:
             pass
     
     if hasattr(bpy.types.Scene, 'df_preview_commit_hash'):
         try:
             del bpy.types.Scene.df_preview_commit_hash
-        except:
+        except Exception:
             pass
     
     # Unregister classes

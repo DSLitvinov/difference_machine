@@ -58,7 +58,7 @@ class DF_UL_commit_list(UIList):
             # Get date time
             try:
                 date_str = datetime.datetime.fromtimestamp(item.timestamp).strftime('%Y-%m-%d %H:%M')
-            except:
+            except (ValueError, OSError):
                 date_str = "Unknown"
             
             # Format message (truncate if too long to fit in UI)
