@@ -188,6 +188,32 @@ class ForesterDB:
             )
         """)
 
+        # Textures table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS textures (
+                hash TEXT PRIMARY KEY,
+                original_name TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                format TEXT,
+                file_path TEXT NOT NULL,
+                created_at INTEGER,
+                file_size INTEGER
+            )
+        """)
+
+        # Texture-commit relationships
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS texture_commits (
+                texture_hash TEXT NOT NULL,
+                commit_hash TEXT NOT NULL,
+                mesh_hash TEXT,
+                FOREIGN KEY (texture_hash) REFERENCES textures(hash),
+                FOREIGN KEY (commit_hash) REFERENCES commits(hash),
+                PRIMARY KEY (texture_hash, commit_hash, mesh_hash)
+            )
+        """)
+
         # Stash table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS stash (
@@ -759,6 +785,100 @@ class ForesterDB:
         cursor = self.conn.cursor()
         cursor.execute("SELECT 1 FROM meshes WHERE hash = ?", (mesh_hash,))
         return cursor.fetchone() is not None
+
+    # ========== Texture operations ==========
+
+    def add_texture(
+        self,
+        texture_hash: str,
+        original_name: str,
+        file_path: str,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        format: Optional[str] = None,
+        file_size: Optional[int] = None,
+        created_at: Optional[int] = None
+    ) -> None:
+        """
+        Add texture to database.
+
+        Args:
+            texture_hash: SHA-256 hash of the texture
+            original_name: Original filename
+            file_path: Path to texture file in storage
+            width: Texture width in pixels
+            height: Texture height in pixels
+            format: Texture format (PNG, JPEG, etc.)
+            file_size: File size in bytes
+            created_at: Creation timestamp
+        """
+        if self.conn is None:
+            self.connect()
+
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR IGNORE INTO textures
+            (hash, original_name, width, height, format, file_path, file_size, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (texture_hash, original_name, width, height, format, file_path, file_size, created_at))
+        self.conn.commit()
+
+    def get_texture(self, texture_hash: str) -> Optional[Dict[str, Any]]:
+        """Get texture from database."""
+        if self.conn is None:
+            self.connect()
+
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM textures WHERE hash = ?", (texture_hash,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def texture_exists(self, texture_hash: str) -> bool:
+        """Check if texture exists in database."""
+        if self.conn is None:
+            self.connect()
+
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT hash FROM textures WHERE hash = ?", (texture_hash,))
+        return cursor.fetchone() is not None
+
+    def link_texture_to_commit(
+        self,
+        texture_hash: str,
+        commit_hash: str,
+        mesh_hash: Optional[str] = None
+    ) -> None:
+        """
+        Link texture to commit (and optionally mesh).
+
+        Args:
+            texture_hash: Texture hash
+            commit_hash: Commit hash
+            mesh_hash: Optional mesh hash
+        """
+        if self.conn is None:
+            self.connect()
+
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR IGNORE INTO texture_commits
+            (texture_hash, commit_hash, mesh_hash)
+            VALUES (?, ?, ?)
+        """, (texture_hash, commit_hash, mesh_hash))
+        self.conn.commit()
+
+    def get_textures_for_commit(self, commit_hash: str) -> List[Dict[str, Any]]:
+        """Get all textures used in a commit."""
+        if self.conn is None:
+            self.connect()
+
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT t.* FROM textures t
+            INNER JOIN texture_commits tc ON t.hash = tc.texture_hash
+            WHERE tc.commit_hash = ?
+        """, (commit_hash,))
+        return [dict(row) for row in cursor.fetchall()]
 
     def get_commits_using_mesh(self, mesh_hash: str, storage: Optional['ObjectStorage'] = None) -> List[str]:
         """

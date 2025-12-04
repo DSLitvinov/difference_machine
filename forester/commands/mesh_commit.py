@@ -15,6 +15,7 @@ from ..models.tree import Tree, TreeEntry
 from ..models.commit import Commit
 from ..models.mesh import Mesh
 from ..models.blob import Blob
+from ..models.texture import Texture
 from ..core.hashing import compute_hash
 
 logger = logging.getLogger(__name__)
@@ -144,6 +145,7 @@ def create_mesh_only_commit(
         tree_entries = []
         mesh_hashes = []
         selected_mesh_names = []
+        versioned_textures = []  # List of (texture_hash, mesh_hash) tuples for linking to commit
 
         # Get previous commit for texture comparison
         previous_textures_map = {}
@@ -358,6 +360,15 @@ def create_mesh_only_commit(
                                     texture_info['commit_path'] = f"textures/{texture_filename}"
                                     texture_info['copied'] = True
                                     logger.debug(f"Copied changed texture: {texture_filename} to {dest_path}")
+                                    
+                                    # Version texture independently (will link to commit after commit creation)
+                                    try:
+                                        texture = Texture.from_file(abs_path, dfm_dir, db, storage)
+                                        # Store texture hash for later linking
+                                        versioned_textures.append((texture.hash, mesh_hash))
+                                        logger.debug(f"Versioned texture: {texture.hash[:16]}...")
+                                    except Exception as e:
+                                        logger.warning(f"Failed to version texture {abs_path}: {e}", exc_info=True)
                         elif image_name in existing_textures_map:
                             # Texture unchanged - use existing commit_path
                             existing_tex = existing_textures_map[image_name]
@@ -445,6 +456,12 @@ def create_mesh_only_commit(
 
         # Save commit
         commit.save_to_storage(db, storage)
+
+        # Link versioned textures to commit
+        for texture_hash, mesh_hash in versioned_textures:
+            db.link_texture_to_commit(texture_hash, commit.hash, mesh_hash)
+        if versioned_textures:
+            logger.debug(f"Linked {len(versioned_textures)} textures to commit {commit.hash[:16]}...")
 
         # Update branch reference
         set_branch_ref(repo_path, branch, commit.hash)

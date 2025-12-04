@@ -73,3 +73,45 @@ priority: 4
 ### Silent Failures
 - Use `try/except` with `pass` for non-critical operations
 - Example: Cleanup operations that shouldn't break addon load
+
+## Mesh Diff Visualization
+
+### Vertex Color Visualization
+- Use vertex colors for diff visualization instead of materials
+- When applying diff visualization, switch viewport to vertex color mode: `space.shading.color_type = 'VERTEX'`
+- Materials are temporarily hidden when vertex colors are displayed
+- Always create vertex color layer with unique name (e.g., "DiffColors")
+- Clear vertex colors when clearing diff data
+
+### Diff Computation
+- Compute diff between two mesh versions using `compute_mesh_diff()` from `forester.utils.mesh_diff_utils`
+- Store diff results in scene properties as dictionary (use `diff.to_dict()`)
+- Diff includes geometry changes, material changes, and statistics
+- Tolerance-based vertex matching (default: 0.001) for geometry comparison
+
+### Diff Models
+- Use `MeshDiff`, `GeometryDiff`, `MaterialDiff`, `DiffStatistics` from `forester.models.mesh_diff`
+- Geometry diff tracks: vertices_added, vertices_removed, vertices_modified, vertices_moved, faces_added, faces_removed
+- Material diff tracks: properties_changed, textures_added/removed/modified, nodes_added/removed/modified
+- Statistics include: counts, percentages, displacement metrics
+
+## Texture Versioning
+
+### Texture Versioning
+- Textures are versioned independently from meshes using `Texture` model from `forester.models.texture`
+- Use `Texture.from_file()` to create texture from file, automatically saves to storage
+- Link textures to commits using `db.link_texture_to_commit(texture_hash, commit_hash, mesh_hash)`
+- Textures are stored in `.DFM/objects/textures/{hash[:2]}/{hash[2:]}.{ext}`
+- Automatic texture versioning happens during mesh commit creation
+- Content-addressable storage with SHA-256 hashing ensures deduplication
+
+### Texture Storage Operations
+- Use `ObjectStorage.save_texture()` to save texture data
+- Use `ObjectStorage.load_texture()` to load texture (tries multiple extensions)
+- Always check if texture exists before saving: `storage.texture_exists(hash)`
+
+### Database Texture Operations
+- Use `db.add_texture()` to add texture metadata
+- Use `db.get_texture()` to retrieve texture info
+- Use `db.link_texture_to_commit()` to associate texture with commit
+- Use `db.get_textures_for_commit()` to get all textures in commit

@@ -5,6 +5,50 @@ All notable changes to the Difference Machine project will be documented in this
 ## [Unreleased]
 
 ### Added
+- **Mesh Diff Analysis**: Added comprehensive 3D mesh difference analysis system
+  - **Geometry Diff**: Compare geometry changes between mesh versions
+    - Vertex matching with tolerance-based comparison
+    - Detection of added/removed/modified vertices
+    - Face topology comparison
+    - UV and normal changes tracking
+  - **Material Diff**: Compare material changes between versions
+    - Texture changes (added/removed/modified by hash)
+    - Node tree comparison (nodes and links)
+    - Material property changes
+  - **Diff Statistics**: Detailed metrics about changes
+    - Count of added/removed/modified vertices and faces
+    - Percentage change metrics for geometry and materials
+    - Vertex displacement metrics (max and average)
+    - Texture and node change counts
+  - **Visualization**: Vertex color-based visualization of changes
+    - Multiple color schemes: displacement, added, removed, modified
+    - Automatic viewport mode switching to vertex colors
+    - Color-coded change highlighting
+  - **UI Panel**: New "Mesh Diff" panel in sidebar
+    - Compute diff between current mesh and commit version
+    - Display detailed statistics
+    - Apply visualization with color scheme selection
+    - Clear diff data
+  - **Integration**: Automatic diff computation when using Compare feature
+    - Diff is automatically computed and stored when comparing meshes
+    - Statistics available immediately after comparison
+  - Available in Mesh Diff panel (4th panel in Difference Machine tab)
+  - Models: `forester/models/mesh_diff.py` (MeshDiff, GeometryDiff, MaterialDiff, DiffStatistics)
+  - Utilities: `forester/utils/mesh_diff_utils.py` (compute functions)
+- **Independent Texture Versioning**: Textures are versioned separately from meshes
+  - Separate texture storage in `.DFM/objects/textures/`
+  - Texture deduplication at texture level (one texture can be used by many meshes)
+  - Texture history tracking independent from mesh commits
+  - Automatic texture versioning during commit creation
+  - Database tables: `textures`, `texture_commits` for texture-commit relationships
+  - Content-addressable storage with SHA-256 hashing
+  - PIL/Pillow integration for image metadata extraction (with fallback)
+  - **Models**: `forester/models/texture.py` (Texture model)
+  - **Storage**: Extended ObjectStorage with texture operations
+    - `save_texture()`, `load_texture()`, `texture_exists()`
+  - **Database**: Extended ForesterDB with texture methods
+    - `add_texture()`, `get_texture()`, `texture_exists()`
+    - `link_texture_to_commit()`, `get_textures_for_commit()`
 - **Database Rebuild Mechanism**: Added `rebuild_database` command to reconstruct corrupted database from file system storage
   - Automatically scans storage directories and rebuilds database tables
   - Creates backup of existing database before rebuilding

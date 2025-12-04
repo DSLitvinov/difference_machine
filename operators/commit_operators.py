@@ -384,7 +384,7 @@ class DF_OT_refresh_history(Operator):
                     import json
                     try:
                         selected_names = json.loads(selected_names)
-                    except (json.JSONDecodeError, TypeError):
+                    except:
                         selected_names = []
                 if selected_names:
                     commit_item.selected_mesh_names = ", ".join(selected_names)

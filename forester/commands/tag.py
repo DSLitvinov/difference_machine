@@ -152,3 +152,5 @@ def show_tag(repo_path: Path, tag_name: str) -> Optional[Dict[str, Any]]:
             'commit_type': commit_data.get('commit_type', 'project'),
         }
 
+
+
