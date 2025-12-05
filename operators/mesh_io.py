@@ -34,6 +34,30 @@ NODE_TYPE_MAP = {
 
 # ========== EXPORT FUNCTIONS ==========
 
+def get_empty_blend_path() -> Path:
+    """
+    Get path to empty.blend file from addon's empty_files directory.
+    
+    Returns:
+        Path to empty.blend file
+        
+    Raises:
+        FileNotFoundError: If empty.blend file doesn't exist
+    """
+    # Get addon directory path
+    # __file__ will be operators/mesh_io.py, so we go up two levels
+    addon_dir = Path(__file__).parent.parent
+    empty_blend_path = addon_dir / "empty_files" / "empty.blend"
+    
+    if not empty_blend_path.exists():
+        raise FileNotFoundError(
+            f"empty.blend not found at {empty_blend_path}. "
+            "Please ensure empty.blend exists in the empty_files directory."
+        )
+    
+    return empty_blend_path
+
+
 def export_mesh_to_blend(obj, output_path: Path, export_options: Dict[str, bool]) -> Tuple[Path, Dict[str, Any]]:
     """
     Export mesh to .blend file + metadata JSON for diff and textures.
@@ -48,15 +72,13 @@ def export_mesh_to_blend(obj, output_path: Path, export_options: Dict[str, bool]
     """
     blend_path = output_path / "mesh.blend"
     
-    # ВАЖНО: Сохраняем все данные объекта ДО вызова _save_mesh_to_blend
-    # потому что _save_mesh_to_blend вызывает read_homefile() который очищает сцену
+    # Сохраняем имя объекта для использования в метаданных
     obj_name = obj.name
     
-    # ВАЖНО: Извлекаем JSON для diff ДО сохранения .blend файла
-    # потому что _save_mesh_to_blend вызывает read_homefile() который очищает сцену
+    # Извлекаем JSON для diff
     mesh_json, material_json = export_mesh_to_json(obj, export_options)
     
-    # Сохраняем .blend файл (это очистит сцену и сделает obj недействительным)
+    # Сохраняем .blend файл в фоновом процессе (не затрагивает текущую сцену)
     _save_mesh_to_blend(obj, blend_path)
     
     # ВАЖНО: Используем сохраненное obj_name, НЕ obj.name (obj уже недействителен!)
@@ -77,32 +99,37 @@ def export_mesh_to_blend(obj, output_path: Path, export_options: Dict[str, bool]
 
 def _save_mesh_to_blend(obj, output_path: Path) -> None:
     """
-    Save single mesh object to minimal .blend file.
+    Save single mesh object to minimal .blend file using background process.
     
-    Uses bpy.data.libraries.write() to save data blocks without clearing scene,
-    then creates a new file and loads the library.
+    Uses subprocess to run Blender in background mode with empty.blend template,
+    avoiding any impact on the current scene. This is the recommended approach
+    for mesh-only commits as it doesn't modify the user's project.
     
     Args:
         obj: Blender mesh object to save
         output_path: Path to save .blend file
+        
+    Raises:
+        FileNotFoundError: If empty.blend template is not found
+        subprocess.CalledProcessError: If background export fails
     """
     import tempfile
+    import subprocess
     
-    # Сохраняем все данные объекта ДО любых операций со сценой
+    # Сохраняем все данные объекта ДО любых операций
     obj_name = obj.name
     obj_location = tuple(obj.location)
     obj_rotation = tuple(obj.rotation_euler)
     obj_scale = tuple(obj.scale)
     
-    # Сохраняем оригинальный файл
-    original_file = bpy.data.filepath
+    # Получаем путь к empty.blend
+    empty_blend_path = get_empty_blend_path()
     
     # Создаем временный файл для сохранения библиотеки
     temp_lib_path = Path(tempfile.mktemp(suffix='.blend'))
     
     try:
         # Собираем все данные для сохранения в SET
-        # ВАЖНО: Делаем это ДО вызова read_homefile()
         data_blocks_to_save = set()
         data_blocks_to_save.add(obj)
         data_blocks_to_save.add(obj.data)
@@ -123,51 +150,51 @@ def _save_mesh_to_blend(obj, output_path: Path) -> None:
         # Сохраняем данные в библиотеку (БЕЗ очистки текущей сцены)
         bpy.data.libraries.write(str(temp_lib_path), data_blocks_to_save, fake_user=True)
         
-        # Теперь создаем новый файл и загружаем библиотеку
-        bpy.ops.wm.read_homefile(app_template="")
+        # Запускаем Blender в фоновом режиме для экспорта
+        script_path = Path(__file__).parent / "mesh_export_background.py"
         
-        # Загружаем библиотеку в новый файл
-        with bpy.data.libraries.load(str(temp_lib_path), link=False) as (data_from, data_to):
-            # Загружаем meshes
-            if data_from.meshes:
-                data_to.meshes = [data_from.meshes[0]]
-            
-            # Загружаем materials
-            if data_from.materials:
-                data_to.materials = data_from.materials
-            
-            # Загружаем node_groups если есть
-            if data_from.node_groups:
-                data_to.node_groups = data_from.node_groups
-            
-            # Загружаем images если есть
-            if data_from.images:
-                data_to.images = data_from.images
+        if not script_path.exists():
+            raise FileNotFoundError(
+                f"Background export script not found at {script_path}. "
+                "Please ensure mesh_export_background.py exists in operators directory."
+            )
         
-        # Создаем объект из загруженного mesh
-        # Используем сохраненные значения, НЕ ссылки на obj
-        if data_to.meshes:
-            loaded_mesh = data_to.meshes[0]
-            new_obj = bpy.data.objects.new(obj_name, loaded_mesh)
-            new_obj.location = obj_location
-            new_obj.rotation_euler = obj_rotation
-            new_obj.scale = obj_scale
-            
-            # Применяем материалы
-            if data_to.materials:
-                for mat in data_to.materials:
-                    loaded_mesh.materials.append(mat)
-            
-            # Добавляем в сцену
-            bpy.context.collection.objects.link(new_obj)
-            
-            # Выбираем объект
-            bpy.context.view_layer.objects.active = new_obj
-            new_obj.select_set(True)
+        # Подготавливаем аргументы для фонового процесса
+        cmd = [
+            bpy.app.binary_path,
+            '--background',
+            '--python', str(script_path),
+            '--',
+            '--empty_blend', str(empty_blend_path),
+            '--output_file', str(output_path),
+            '--mesh_name', obj_name,
+            '--library_file', str(temp_lib_path),
+            '--obj_location', str(obj_location[0]), str(obj_location[1]), str(obj_location[2]),
+            '--obj_rotation', str(obj_rotation[0]), str(obj_rotation[1]), str(obj_rotation[2]),
+            '--obj_scale', str(obj_scale[0]), str(obj_scale[1]), str(obj_scale[2])
+        ]
         
-        # Сохраняем файл
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        bpy.ops.wm.save_as_mainfile(filepath=str(output_path), check_existing=False)
+        logger.debug(f"Running background export: {' '.join(cmd)}")
+        
+        # Выполняем фоновый экспорт
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False  # Не выбрасываем исключение сразу, проверяем код возврата
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or "Unknown error"
+            logger.error(f"Background export failed with code {result.returncode}: {error_msg}")
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                cmd,
+                output=result.stdout,
+                stderr=result.stderr
+            )
+        
+        logger.debug(f"Background export completed successfully: {output_path}")
         
     finally:
         # Удаляем временный файл библиотеки
@@ -176,19 +203,6 @@ def _save_mesh_to_blend(obj, output_path: Path) -> None:
                 temp_lib_path.unlink()
             except Exception as e:
                 logger.warning(f"Failed to delete temp library file: {e}")
-        
-        # Восстанавливаем оригинальный файл
-        try:
-            if original_file and Path(original_file).exists():
-                bpy.ops.wm.open_mainfile(filepath=original_file)
-            else:
-                bpy.ops.wm.read_homefile(app_template="")
-        except Exception as e:
-            logger.warning(f"Failed to restore original file: {e}", exc_info=True)
-            try:
-                bpy.ops.wm.read_homefile(app_template="")
-            except Exception:
-                pass
 
 
 def export_mesh_to_json(obj, export_options):
@@ -246,19 +260,28 @@ def export_mesh_to_json(obj, export_options):
                 textures = []
                 for node in mat.node_tree.nodes:
                     if node.type == 'TEX_IMAGE' and node.image:
+                        # Normalize original_path - convert to absolute and normalize separators
+                        original_path = None
+                        if node.image.filepath:
+                            # Get absolute path
+                            abs_path_str = bpy.path.abspath(node.image.filepath)
+                            # Normalize path separators - use forward slashes for cross-platform compatibility
+                            # But keep as absolute path for storage
+                            original_path = str(Path(abs_path_str)).replace('\\', '/')
+                        
                         texture_info = {
                             'node_name': node.name,
                             'image_name': node.image.name,
-                            'original_path': node.image.filepath,
+                            'original_path': original_path,
                             'file_hash': None,  # Будет вычислен при создании коммита
                             'copied': False,  # Будет установлено при создании коммита
                             'commit_path': None  # Путь к текстуре в коммите (если скопирована)
                         }
                         
                         # Вычисляем хеш файла текстуры
-                        if node.image.filepath:
-                            abs_path = bpy.path.abspath(node.image.filepath)
-                            if os.path.exists(abs_path):
+                        if original_path:
+                            abs_path = Path(original_path)
+                            if abs_path.exists():
                                 from ..forester.core.hashing import compute_file_hash
                                 try:
                                     texture_info['file_hash'] = compute_file_hash(Path(abs_path))
@@ -443,6 +466,8 @@ def _export_image_texture(node, node_data, texture_map):
             if texture_info.get('copied') and texture_info.get('commit_path'):
                 # Убеждаемся что commit_path это строка, не PosixPath
                 commit_path = str(texture_info['commit_path'])
+                # Normalize path - handle both Windows and Unix separators
+                commit_path = commit_path.replace('\\', '/')
                 # Убираем префикс "textures/" если есть
                 if commit_path.startswith('textures/'):
                     commit_path = commit_path.replace('textures/', '', 1)
@@ -948,6 +973,8 @@ def _import_image_texture(node, node_data, texture_map, textures_dir):
             if texture_info.get('copied') and texture_info.get('commit_path'):
                 # Убеждаемся что commit_path это строка, не PosixPath
                 commit_path = str(texture_info['commit_path'])
+                # Normalize path - handle both Windows and Unix separators
+                commit_path = commit_path.replace('\\', '/')
                 if commit_path.startswith('textures/'):
                     commit_path = commit_path.replace('textures/', '', 1)
                 candidate_paths.append(str(textures_dir / commit_path))
@@ -958,10 +985,12 @@ def _import_image_texture(node, node_data, texture_map, textures_dir):
     # 3. Try image_file from node_data (like in difference_engine)
     if 'image_file' in node_data:
         image_file = node_data['image_file']
+        # Normalize path - handle both Windows and Unix separators
+        normalized_image_file = str(image_file).replace('\\', '/')
         if textures_dir:
-            candidate_paths.append(os.path.join(str(textures_dir), os.path.basename(image_file)))
+            candidate_paths.append(os.path.join(str(textures_dir), os.path.basename(normalized_image_file)))
         # Always try absolute path (works even if textures_dir doesn't exist)
-        candidate_paths.append(bpy.path.abspath(image_file))
+        candidate_paths.append(bpy.path.abspath(normalized_image_file))
     
     # 4. Try original path from texture_info (for backward compatibility)
     if texture_info and texture_info.get('original_path'):
@@ -1151,16 +1180,23 @@ def load_textures_to_material(material, textures_info, mesh_storage_path):
             # Текстура скопирована в коммит
             # Убеждаемся что commit_path это строка, не PosixPath
             commit_path = str(texture_info['commit_path'])
+            # Normalize path - handle both Windows and Unix separators
+            commit_path = commit_path.replace('\\', '/')
             # Убираем префикс "textures/" если есть
             if commit_path.startswith('textures/'):
                 commit_path = commit_path.replace('textures/', '', 1)
-            texture_path = mesh_storage_path / commit_path
+            # Use forward slashes for cross-platform compatibility
+            texture_path = mesh_storage_path / "textures" / commit_path
             logger.debug(f"Using copied texture path: {texture_path}")
         elif texture_info.get('original_path'):
             # Используем оригинальный путь
             original_path = str(texture_info['original_path'])
-            texture_path = Path(bpy.path.abspath(original_path))
-            logger.debug(f"Using original texture path: {texture_path}")
+            # Normalize path - handle both Windows and Unix separators
+            # Path may be stored with forward slashes, but we need to handle it correctly
+            normalized_original = original_path.replace('\\', '/')
+            # Use bpy.path.abspath to resolve relative paths correctly
+            texture_path = Path(bpy.path.abspath(normalized_original))
+            logger.debug(f"Using original texture path: {texture_path} (normalized from: {original_path})")
         
         # Загружаем текстуру
         if texture_path and texture_path.exists() and texture_path.is_file():

@@ -5,6 +5,19 @@ All notable changes to the Difference Machine project will be documented in this
 ## [Unreleased]
 
 ### Added
+- **Background Mesh Export**: Mesh-only commits now use background Blender process
+  - Exports meshes without modifying current project scene
+  - Uses `empty.blend` template file from `empty_files/` directory
+  - Runs separate Blender instance in `--background` mode via subprocess
+  - Ensures project stability and prevents scene corruption during commit creation
+  - Implementation: `operators/mesh_export_background.py` (background script)
+  - Modified: `operators/mesh_io.py` - `_save_mesh_to_blend()` now uses background process
+  - Added: `get_empty_blend_path()` function to locate template file
+  - Benefits:
+    - No scene modification during mesh export
+    - No need to restore project after commit
+    - Better stability and reliability
+    - Compatible with future 3D package addons (similar pattern can be used)
 - **Mesh Diff Analysis**: Added comprehensive 3D mesh difference analysis system
   - **Geometry Diff**: Compare geometry changes between mesh versions
     - Vertex matching with tolerance-based comparison
@@ -100,6 +113,12 @@ All notable changes to the Difference Machine project will be documented in this
   - Reduces repository size by removing unused temporary commit snapshots
 
 ### Changed
+- **Mesh Export Process**: Changed mesh-only commit creation to use background process
+  - Previously used `read_homefile()` which cleared current scene
+  - Now uses subprocess to run Blender in background with `empty.blend` template
+  - Current project scene is never modified during mesh export
+  - Eliminates need for scene restoration after commit creation
+  - More reliable and stable commit creation process
 - **Branch Switching**: Fixed critical bug where "Already on branch" message appeared incorrectly
   - Improved database synchronization with `PRAGMA wal_checkpoint(TRUNCATE)`
   - Fresh database connections for branch state checks

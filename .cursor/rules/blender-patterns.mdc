@@ -115,3 +115,45 @@ priority: 4
 - Use `db.get_texture()` to retrieve texture info
 - Use `db.link_texture_to_commit()` to associate texture with commit
 - Use `db.get_textures_for_commit()` to get all textures in commit
+
+## Mesh Export Operations
+
+### Background Mesh Export
+- **Purpose**: Export meshes to .blend files without modifying current project scene
+- **Implementation**: Uses subprocess to run Blender in `--background` mode
+- **Template File**: `empty_files/empty.blend` - empty Blender file template
+- **Script**: `operators/mesh_export_background.py` - background export script
+- **Main Function**: `operators/mesh_io.py::_save_mesh_to_blend()` - orchestrates export
+- **Helper Function**: `operators/mesh_io.py::get_empty_blend_path()` - locates template
+
+### Export Pattern
+```python
+# 1. Save mesh data to temporary library (doesn't modify scene)
+bpy.data.libraries.write(str(temp_lib_path), data_blocks_to_save, fake_user=True)
+
+# 2. Run background Blender process
+subprocess.run([
+    bpy.app.binary_path,
+    '--background',
+    '--python', str(script_path),  # mesh_export_background.py
+    '--',
+    '--empty_blend', str(empty_blend_path),
+    '--output_file', str(output_path),
+    '--mesh_name', obj_name,
+    '--library_file', str(temp_lib_path),
+    '--obj_location', str(x), str(y), str(z),
+    '--obj_rotation', str(rx), str(ry), str(rz),
+    '--obj_scale', str(sx), str(sy), str(sz)
+])
+```
+
+### Benefits
+- **Scene Stability**: Current project scene is never modified
+- **No Restoration**: No need to restore project after commit
+- **Reliability**: Better stability and prevents scene corruption
+- **Compatibility**: Pattern can be reused for other 3D packages
+
+### Requirements
+- `empty_files/empty.blend` must exist in addon directory
+- `operators/mesh_export_background.py` must be accessible
+- Blender binary path must be available via `bpy.app.binary_path`

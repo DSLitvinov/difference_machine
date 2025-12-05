@@ -118,6 +118,17 @@ def create_mesh_only_commit(
     if not mesh_data_list:
         return None  # No meshes to commit
 
+    # Normalize export_options - ensure it's a dict, not a string
+    if isinstance(export_options, str):
+        try:
+            export_options = json.loads(export_options)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Failed to parse export_options as JSON: {export_options}, using defaults")
+            export_options = {}
+    elif not isinstance(export_options, dict):
+        logger.warning(f"export_options is not a dict: {type(export_options)}, using defaults")
+        export_options = {}
+
     # Get current branch
     branch = get_current_branch(repo_path)
     if not branch:
@@ -167,8 +178,21 @@ def create_mesh_only_commit(
         for mesh_data in mesh_data_list:
             mesh_name = mesh_data['mesh_name']
             blend_path = Path(mesh_data['blend_path'])
-            metadata = mesh_data['metadata']
+            metadata_raw = mesh_data['metadata']
             obj = mesh_data.get('obj')  # Blender object для обработки текстур
+            
+            # Normalize metadata - ensure it's a dict, not a string
+            if isinstance(metadata_raw, str):
+                try:
+                    metadata = json.loads(metadata_raw)
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(f"Failed to parse metadata as JSON: {metadata_raw}, using empty dict")
+                    metadata = {}
+            elif isinstance(metadata_raw, dict):
+                metadata = metadata_raw
+            else:
+                logger.warning(f"metadata is not a dict or string: {type(metadata_raw)}, using empty dict")
+                metadata = {}
             
             mesh_json = metadata.get('mesh_json', {})
             material_json = metadata.get('material_json', {})
@@ -244,19 +268,28 @@ def create_mesh_only_commit(
                             # Copy texture file
                             original_path = texture_info.get('original_path')
                             if original_path:
+                                # Normalize path - handle both Windows and Unix separators
+                                # Convert to string and normalize separators
+                                original_path_str = str(original_path).replace('\\', '/')
+                                
                                 # Convert relative path to absolute with proper normalization
                                 try:
-                                    if os.path.isabs(original_path):
-                                        abs_path = Path(original_path).resolve()
+                                    # Check if path is absolute (handle both Windows and Unix)
+                                    if os.path.isabs(original_path_str) or (len(original_path_str) > 1 and original_path_str[1] == ':'):
+                                        # Windows absolute path (C:/...) or Unix absolute path (/...)
+                                        abs_path = Path(original_path_str).resolve()
                                     else:
                                         # Resolve relative to working directory
-                                        abs_path = (working_dir / original_path).resolve()
+                                        # Normalize separators for Path operations
+                                        normalized_relative = original_path_str.replace('/', os.sep)
+                                        abs_path = (working_dir / normalized_relative).resolve()
+                                    
                                     # Additional safety check
                                     if not abs_path.exists():
-                                        logger.warning(f"Texture path does not exist: {abs_path}")
+                                        logger.warning(f"Texture path does not exist: {abs_path} (original: {original_path})")
                                         continue
                                 except (OSError, ValueError) as e:
-                                    logger.warning(f"Invalid texture path '{original_path}': {e}")
+                                    logger.warning(f"Invalid texture path '{original_path}': {e}", exc_info=True)
                                     continue
 
                                 if abs_path.exists() and abs_path.is_file():
@@ -367,6 +400,7 @@ def create_mesh_only_commit(
                                     texture_filename = abs_path.name
                                     dest_path = textures_dir / texture_filename
                                     shutil.copy2(abs_path, dest_path)
+                                    # Normalize path - always use forward slashes for cross-platform compatibility
                                     texture_info['commit_path'] = f"textures/{texture_filename}"
                                     texture_info['copied'] = True
                                     logger.debug(f"Copied changed texture: {texture_filename} to {dest_path}")
@@ -497,11 +531,23 @@ def filter_mesh_data(mesh_json: Dict[str, Any], export_options: Dict[str, bool])
 
     Args:
         mesh_json: Full mesh JSON data
-        export_options: Export options dict
+        export_options: Export options dict (or string that will be parsed)
 
     Returns:
         Filtered mesh JSON
     """
+    # Ensure export_options is a dict, not a string
+    if isinstance(export_options, str):
+        try:
+            import json
+            export_options = json.loads(export_options)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Failed to parse export_options as JSON: {export_options}")
+            export_options = {}
+    elif not isinstance(export_options, dict):
+        logger.warning(f"export_options is not a dict: {type(export_options)}, using defaults")
+        export_options = {}
+    
     filtered = {}
 
     if export_options.get('vertices', True):

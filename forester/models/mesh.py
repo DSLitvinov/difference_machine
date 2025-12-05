@@ -34,12 +34,32 @@ class Mesh:
     @property
     def mesh_json(self) -> Dict[str, Any]:
         """Get mesh JSON from metadata."""
-        return self.metadata.get('mesh_json', {})
+        mesh_json_raw = self.metadata.get('mesh_json', {})
+        # Normalize - ensure it's a dict, not a string
+        if isinstance(mesh_json_raw, str):
+            try:
+                return json.loads(mesh_json_raw)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        elif isinstance(mesh_json_raw, dict):
+            return mesh_json_raw
+        else:
+            return {}
 
     @property
     def material_json(self) -> Dict[str, Any]:
         """Get material JSON from metadata."""
-        return self.metadata.get('material_json', {})
+        material_json_raw = self.metadata.get('material_json', {})
+        # Normalize - ensure it's a dict, not a string
+        if isinstance(material_json_raw, str):
+            try:
+                return json.loads(material_json_raw)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        elif isinstance(material_json_raw, dict):
+            return material_json_raw
+        else:
+            return {}
 
     def compute_hash(self) -> str:
         """
@@ -150,7 +170,19 @@ class Mesh:
             return None
 
         with open(metadata_path, 'r', encoding='utf-8') as f:
-            metadata = json.load(f)
+            metadata_raw = json.load(f)
+        
+        # Normalize metadata - ensure nested dicts are not strings
+        if isinstance(metadata_raw, dict):
+            metadata = metadata_raw
+            # Check if material_json is a string
+            if 'material_json' in metadata and isinstance(metadata['material_json'], str):
+                try:
+                    metadata['material_json'] = json.loads(metadata['material_json'])
+                except (json.JSONDecodeError, TypeError):
+                    metadata['material_json'] = {}
+        else:
+            metadata = {}
 
         return cls.from_blend_file(blend_path, metadata, base_dir, db, storage)
 
@@ -173,11 +205,23 @@ class Mesh:
             return None
 
         mesh_data = storage.load_mesh(mesh_hash)
+        
+        # Normalize metadata - ensure it's a dict, not a string
+        metadata_raw = mesh_data.get('metadata', {})
+        if isinstance(metadata_raw, str):
+            try:
+                metadata = json.loads(metadata_raw)
+            except (json.JSONDecodeError, TypeError):
+                metadata = {}
+        elif isinstance(metadata_raw, dict):
+            metadata = metadata_raw
+        else:
+            metadata = {}
 
         return cls(
             hash=mesh_info['hash'],
             blend_path=Path(mesh_data['blend_path']),
-            metadata=mesh_data['metadata'],
+            metadata=metadata,
             created_at=mesh_info.get('created_at')
         )
 
@@ -206,10 +250,28 @@ class Mesh:
         Returns:
             Mesh instance
         """
+        metadata_raw = data.get('metadata', {})
+        # Normalize metadata - ensure it's a dict, not a string
+        if isinstance(metadata_raw, str):
+            try:
+                metadata = json.loads(metadata_raw)
+            except (json.JSONDecodeError, TypeError):
+                metadata = {}
+        elif isinstance(metadata_raw, dict):
+            metadata = metadata_raw
+            # Check if material_json is a string
+            if 'material_json' in metadata and isinstance(metadata['material_json'], str):
+                try:
+                    metadata['material_json'] = json.loads(metadata['material_json'])
+                except (json.JSONDecodeError, TypeError):
+                    metadata['material_json'] = {}
+        else:
+            metadata = {}
+        
         return cls(
             hash=data.get('hash', ''),
             blend_path=Path(data.get('blend_path', '')),
-            metadata=data.get('metadata', {}),
+            metadata=metadata,
             created_at=data.get('created_at')
         )
 

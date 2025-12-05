@@ -17,6 +17,7 @@ def capture_viewport_screenshot(context) -> Optional[bytes]:
     Capture a screenshot of the current 3D viewport.
     
     Uses bpy.ops.screen.screenshot_area() for reliable viewport capture.
+    Handles cases where EEVEE or other render engines might not be available.
     
     Args:
         context: Blender context
@@ -25,6 +26,11 @@ def capture_viewport_screenshot(context) -> Optional[bytes]:
         bytes: PNG image data, or None if capture failed
     """
     try:
+        # Check if context is valid
+        if not context or not hasattr(context, 'screen') or not context.screen:
+            logger.warning("Invalid context for screenshot capture")
+            return None
+        
         # Find the 3D viewport area
         area_3d = None
         for area in context.screen.areas:
@@ -47,6 +53,33 @@ def capture_viewport_screenshot(context) -> Optional[bytes]:
             logger.warning("No WINDOW region found in 3D viewport")
             return None
         
+        # Check if space_data is valid
+        space_data = None
+        if area_3d.spaces:
+            space_data = area_3d.spaces[0]
+            # Check if render engine is available (handle EEVEE not available warning)
+            if hasattr(space_data, 'shading') and hasattr(space_data.shading, 'type'):
+                # Try to set a safe shading type if current one is problematic
+                try:
+                    current_type = space_data.shading.type
+                    # If using RENDERED mode and engine is not available, switch to MATERIAL
+                    if current_type == 'RENDERED':
+                        # Check if render engine is available
+                        if hasattr(bpy.context.scene, 'render') and hasattr(bpy.context.scene.render, 'engine'):
+                            engine = bpy.context.scene.render.engine
+                            # If EEVEE is not available, switch to MATERIAL preview
+                            if engine == 'BLENDER_EEVEE':
+                                try:
+                                    # Try to access EEVEE settings to see if it's available
+                                    if not hasattr(bpy.context.scene, 'eevee'):
+                                        logger.debug("EEVEE not available, switching to MATERIAL preview")
+                                        space_data.shading.type = 'MATERIAL'
+                                except:
+                                    logger.debug("EEVEE check failed, switching to MATERIAL preview")
+                                    space_data.shading.type = 'MATERIAL'
+                except Exception as e:
+                    logger.debug(f"Could not check/set shading type: {e}")
+        
         # Create temporary file for screenshot
         temp_dir = tempfile.gettempdir()
         temp_file = os.path.join(temp_dir, f"blender_screenshot_{os.getpid()}.png")
@@ -56,13 +89,16 @@ def capture_viewport_screenshot(context) -> Optional[bytes]:
         # Use screenshot_area operator with context override
         try:
             # Try with full context override
-            with context.temp_override(
-                window=context.window,
-                area=area_3d,
-                region=region_3d,
-                screen=context.window.screen,
-                space_data=area_3d.spaces[0] if area_3d.spaces else None
-            ):
+            override_kwargs = {
+                'window': context.window,
+                'area': area_3d,
+                'region': region_3d,
+                'screen': context.window.screen,
+            }
+            if space_data:
+                override_kwargs['space_data'] = space_data
+            
+            with context.temp_override(**override_kwargs):
                 # Use screenshot_area for specific area
                 bpy.ops.screen.screenshot_area(filepath=temp_file)
                 

@@ -110,6 +110,18 @@ class Commit:
         if screenshot_hash == "":
             screenshot_hash = None
 
+        # Ensure export_options is a dict, not a string
+        export_options_raw = data.get('export_options', {})
+        if isinstance(export_options_raw, str):
+            try:
+                export_options = json.loads(export_options_raw)
+            except (json.JSONDecodeError, TypeError):
+                export_options = {}
+        elif isinstance(export_options_raw, dict):
+            export_options = export_options_raw
+        else:
+            export_options = {}
+
         return cls(
             hash=data.get('hash', ''),
             parent_hash=data.get('parent_hash'),
@@ -121,7 +133,7 @@ class Commit:
             mesh_hashes=data.get('mesh_hashes', []),
             commit_type=data.get('commit_type', 'project'),
             selected_mesh_names=data.get('selected_mesh_names', []),
-            export_options=data.get('export_options', {}),
+            export_options=export_options,
             screenshot_hash=screenshot_hash
         )
 
@@ -180,7 +192,17 @@ class Commit:
                 mesh_hashes = commit_data.get('mesh_hashes', [])
                 commit_type = commit_data.get('commit_type', 'project')
                 selected_mesh_names = commit_data.get('selected_mesh_names', [])
-                export_options = commit_data.get('export_options', {})
+                export_options_raw = commit_data.get('export_options', {})
+                # Ensure export_options is a dict, not a string
+                if isinstance(export_options_raw, str):
+                    try:
+                        export_options = json.loads(export_options_raw)
+                    except (json.JSONDecodeError, TypeError):
+                        export_options = {}
+                elif isinstance(export_options_raw, dict):
+                    export_options = export_options_raw
+                else:
+                    export_options = {}
             except FileNotFoundError:
                 mesh_hashes = []
                 commit_type = commit_info.get('commit_type', 'project')
@@ -240,6 +262,15 @@ class Commit:
             Commit instance
         """
         timestamp = int(time.time())
+
+        # Normalize export_options - ensure it's a dict, not a string
+        if isinstance(export_options, str):
+            try:
+                export_options = json.loads(export_options)
+            except (json.JSONDecodeError, TypeError):
+                export_options = {}
+        elif not isinstance(export_options, dict):
+            export_options = {}
 
         commit = cls(
             hash="",  # Will be computed

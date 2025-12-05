@@ -104,8 +104,14 @@ class DF_OT_create_project_commit(Operator):
             if commit_hash:
                 self.report({'INFO'}, f"Commit created: {commit_hash[:16]}...")
                 
-                # Set tag if provided
-                tag_name = props.commit_tag.strip() if props.commit_tag else None
+                # Set tag if provided (get tag before clearing fields)
+                tag_name = None
+                try:
+                    if hasattr(context.scene, 'df_commit_props') and context.scene.df_commit_props:
+                        tag_name = context.scene.df_commit_props.commit_tag.strip() if context.scene.df_commit_props.commit_tag else None
+                except Exception as e:
+                    logger.warning(f"Failed to get commit tag: {e}", exc_info=True)
+                
                 if tag_name:
                     try:
                         create_tag(repo_path, tag_name, commit_hash=commit_hash)
@@ -118,17 +124,32 @@ class DF_OT_create_project_commit(Operator):
                         self.report({'WARNING'}, f"Failed to set tag: {str(e)}")
                 
                 # Clear message and tag fields after successful commit
-                props.message = ""
-                props.commit_tag = ""
+                # Use try-except to handle potential context corruption
+                try:
+                    if hasattr(context.scene, 'df_commit_props') and context.scene.df_commit_props:
+                        context.scene.df_commit_props.message = ""
+                        context.scene.df_commit_props.commit_tag = ""
+                except Exception as e:
+                    logger.warning(f"Failed to clear commit fields: {e}", exc_info=True)
+                    # Continue anyway - this is not critical
                 
                 # Check and run automatic garbage collection if enabled
                 from .operator_helpers import check_and_run_garbage_collect
                 check_and_run_garbage_collect(context, repo_path)
                 
                 # Refresh branches list (commit count may have changed)
-                bpy.ops.df.refresh_branches(update_index=False)
+                # Use try-except to handle potential context issues
+                try:
+                    bpy.ops.df.refresh_branches(update_index=False)
+                except Exception as e:
+                    logger.warning(f"Failed to refresh branches: {e}", exc_info=True)
+                
                 # Refresh commit history
-                bpy.ops.df.refresh_history()
+                try:
+                    bpy.ops.df.refresh_history()
+                except Exception as e:
+                    logger.warning(f"Failed to refresh history: {e}", exc_info=True)
+                
                 return {'FINISHED'}
             else:
                 self.report({'INFO'}, "No changes to commit")
@@ -190,8 +211,24 @@ class DF_OT_create_mesh_commit(Operator):
         
         # Get current branch from repository
         branch_name = get_current_branch(repo_path) or "main"
+        
+        # ВАЖНО: Сохраняем все значения свойств ДО экспорта мешей
+        # потому что export_mesh_to_blend может очистить сцену через read_homefile()
         props = context.scene.df_commit_props
-        export_options = props.get_export_options()
+        commit_message = ""
+        commit_tag = ""
+        try:
+            if hasattr(context.scene, 'df_commit_props') and context.scene.df_commit_props:
+                commit_message = context.scene.df_commit_props.message or "No message"
+                commit_tag = context.scene.df_commit_props.commit_tag or ""
+                export_options = context.scene.df_commit_props.get_export_options()
+            else:
+                export_options = {}
+        except Exception as e:
+            logger.warning(f"Failed to get commit properties: {e}", exc_info=True)
+            commit_message = "No message"
+            commit_tag = ""
+            export_options = {}
         
         # Get author from preferences (always use settings, fallback to "Unknown" if empty)
         from .operator_helpers import get_addon_preferences
@@ -298,7 +335,7 @@ class DF_OT_create_mesh_commit(Operator):
                 repo_path=repo_path,
                 mesh_data_list=mesh_data_list,
                 export_options=export_options,
-                message=props.message or "No message",
+                message=commit_message,  # Используем сохраненное значение
                 author=default_author,
                 screenshot_hash=screenshot_hash
             )
@@ -306,8 +343,9 @@ class DF_OT_create_mesh_commit(Operator):
             if commit_hash:
                 self.report({'INFO'}, f"Mesh commit created: {commit_hash[:16]}...")
                 
-                # Set tag if provided
-                tag_name = props.commit_tag.strip() if props.commit_tag else None
+                # Set tag if provided (use saved tag value)
+                tag_name = commit_tag.strip() if commit_tag else None
+                
                 if tag_name:
                     try:
                         create_tag(repo_path, tag_name, commit_hash=commit_hash)
@@ -320,8 +358,14 @@ class DF_OT_create_mesh_commit(Operator):
                         self.report({'WARNING'}, f"Failed to set tag: {str(e)}")
                 
                 # Clear message and tag fields after successful commit
-                props.message = ""
-                props.commit_tag = ""
+                # Use try-except to handle potential context corruption
+                try:
+                    if hasattr(context.scene, 'df_commit_props') and context.scene.df_commit_props:
+                        context.scene.df_commit_props.message = ""
+                        context.scene.df_commit_props.commit_tag = ""
+                except Exception as e:
+                    logger.warning(f"Failed to clear commit fields: {e}", exc_info=True)
+                    # Continue anyway - this is not critical
                 
                 # Auto-compress if enabled (use preference setting)
                 if prefs.auto_compress:
@@ -339,9 +383,17 @@ class DF_OT_create_mesh_commit(Operator):
                 check_and_run_garbage_collect(context, repo_path)
                 
                 # Refresh branches list (commit count may have changed)
-                bpy.ops.df.refresh_branches(update_index=False)
+                # Use try-except to handle potential context issues
+                try:
+                    bpy.ops.df.refresh_branches(update_index=False)
+                except Exception as e:
+                    logger.warning(f"Failed to refresh branches: {e}", exc_info=True)
+                
                 # Refresh commit history
-                bpy.ops.df.refresh_history()
+                try:
+                    bpy.ops.df.refresh_history()
+                except Exception as e:
+                    logger.warning(f"Failed to refresh history: {e}", exc_info=True)
                 
                 return {'FINISHED'}
             else:

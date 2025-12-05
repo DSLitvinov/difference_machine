@@ -73,6 +73,11 @@ After initialization, the following will be created in your project folder:
   - `refs/branches/` – branch references
   - `preview_temp/` – temporary files for preview (automatically cleaned)
 
+**Add-on Structure:**
+- `empty_files/empty.blend` – Empty Blender file template for background mesh export
+  - Used when creating mesh-only commits
+  - Ensures export stability without affecting current project
+
 ---
 
 ## Creating Commits
@@ -103,6 +108,10 @@ After initialization, the following will be created in your project folder:
 - Only selected objects, their materials, and textures are saved.
 - Other scene objects are **not** included.
 - Multiple commits can be created for different objects.
+- **Background Export**: Meshes are exported in a background Blender process
+  - Current project scene is not modified during commit creation
+  - Uses `empty.blend` template to create commit files
+  - Ensures stability and prevents loss of unsaved changes
 
 ### Full Project Commit
 
@@ -352,6 +361,8 @@ These operations overwrite the working directory. Unsaved changes will be lost.
 - Always save your `.blend` file before any operation.
 - Use branches for experiments and variants.
 - Use `mesh_only` commits for quick geometry saves.
+  - Background export doesn't affect current scene - you can continue working
+  - No need to save project before creating mesh-only commit
 - Use `project` commits for important milestones.
 - Run Garbage Collection regularly.
 
@@ -401,7 +412,10 @@ A: Simply delete the `.DFM` folder. You can reinitialize with **"Init Project"**
 A: Yes—`project` commits save all files; `mesh_only` commits work per active file.
 
 **Q: Can I use it alongside Git?**  
-A: Yes, but add `.DFM/` to your `.gitignore`—it’s a large binary version store specific to Blender.
+A: Yes, but add `.DFM/` to your `.gitignore`—it's a large binary version store specific to Blender.
+
+**Q: Does creating a mesh-only commit modify the current scene?**  
+A: No. Meshes are exported in a background Blender process using the `empty.blend` template. Your current scene is not modified, and you can continue working while the commit is being created.
 
 ---
 

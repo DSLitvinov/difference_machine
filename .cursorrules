@@ -175,6 +175,37 @@ with ForesterDB(db_path) as db:
   ```
 - **Critical**: Textures must be accessible in the working directory for Blender to load them when opening .blend files from temporary directories
 
+### Mesh Export Operations
+- **Background Export**: Mesh-only commits use background Blender process to avoid modifying current scene
+  - Use `subprocess` to run Blender in `--background` mode
+  - Use `empty.blend` template from `empty_files/` directory
+  - Export script: `operators/mesh_export_background.py`
+  - Main export function: `operators/mesh_io.py::_save_mesh_to_blend()`
+  - Helper function: `operators/mesh_io.py::get_empty_blend_path()`
+- **Pattern**:
+  ```python
+  # 1. Save mesh data to temporary library file
+  bpy.data.libraries.write(str(temp_lib_path), data_blocks_to_save, fake_user=True)
+  
+  # 2. Run background Blender process
+  subprocess.run([
+      bpy.app.binary_path,
+      '--background',
+      '--python', str(script_path),
+      '--',
+      '--empty_blend', str(empty_blend_path),
+      '--output_file', str(output_path),
+      '--mesh_name', obj_name,
+      '--library_file', str(temp_lib_path),
+      # ... transform parameters
+  ])
+  ```
+- **Benefits**: 
+  - Current scene is never modified
+  - No need to restore project after commit
+  - Better stability and reliability
+  - Compatible with future 3D package addons (similar pattern can be used)
+
 ## Blender-Specific Patterns
 
 ### Operators (operators/)

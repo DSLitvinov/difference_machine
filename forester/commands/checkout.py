@@ -322,12 +322,51 @@ def restore_meshes_from_mesh_only_commit(commit: Commit, working_dir: Path,
                 logger.warning(f"Mesh info not found for {mesh_name}, skipping")
                 continue
 
-            # Save mesh_metadata.json (for diff and textures)
+            # Copy textures from storage to working directory
+            import shutil
+            import os
             import json
+            
+            # Get material_json and normalize paths
+            material_json = mesh.material_json.copy() if isinstance(mesh.material_json, dict) else {}
+            
+            if material_json and 'textures' in material_json:
+                working_textures_dir = mesh_dir / "textures"
+                working_textures_dir.mkdir(exist_ok=True)
+                
+                # Get storage path for textures
+                storage_textures_dir = storage_path / "textures"
+                
+                for texture_info in material_json['textures']:
+                    commit_path = texture_info.get('commit_path')
+                    if commit_path:
+                        # Normalize path - handle both Windows and Unix separators
+                        # Remove 'textures/' prefix if present
+                        normalized_path = str(commit_path).replace('\\', '/')
+                        if normalized_path.startswith('textures/'):
+                            normalized_path = normalized_path.replace('textures/', '', 1)
+                        
+                        # Try to copy texture from storage
+                        texture_filename = os.path.basename(normalized_path)
+                        storage_texture_path = storage_textures_dir / texture_filename
+                        working_texture_path = working_textures_dir / texture_filename
+                        
+                        if storage_texture_path.exists() and storage_texture_path.is_file():
+                            try:
+                                shutil.copy2(storage_texture_path, working_texture_path)
+                                logger.debug(f"Copied texture: {texture_filename} to {working_texture_path}")
+                                # Update commit_path to point to working directory
+                                texture_info['commit_path'] = f"textures/{texture_filename}"
+                            except Exception as e:
+                                logger.warning(f"Failed to copy texture {texture_filename}: {e}", exc_info=True)
+                        else:
+                            logger.warning(f"Texture not found in storage: {storage_texture_path}")
+            
+            # Save mesh_metadata.json (for diff and textures)
             metadata_path = mesh_dir / "mesh_metadata.json"
             metadata = {
                 'mesh_json': mesh.mesh_json,
-                'material_json': mesh.material_json,
+                'material_json': material_json,  # Use updated material_json with normalized paths
                 'object_name': mesh_name,
             }
             with open(metadata_path, 'w', encoding='utf-8') as f:
@@ -391,16 +430,56 @@ def restore_meshes_from_commit(commit: Commit, working_dir: Path,
                 mesh_dir = meshes_dir / mesh_name
                 mesh_dir.mkdir(exist_ok=True)
 
-                # Save mesh.json
+                # Copy textures from storage to working directory
+                import shutil
+                import os
                 import json
+                
+                # Get storage path
+                storage_path = Path(mesh_info['path'])
+                storage_textures_dir = storage_path / "textures"
+                
+                # Get material_json and normalize paths
+                material_json = mesh.material_json.copy() if isinstance(mesh.material_json, dict) else {}
+                
+                if material_json and 'textures' in material_json:
+                    working_textures_dir = mesh_dir / "textures"
+                    working_textures_dir.mkdir(exist_ok=True)
+                    
+                    for texture_info in material_json['textures']:
+                        commit_path = texture_info.get('commit_path')
+                        if commit_path:
+                            # Normalize path - handle both Windows and Unix separators
+                            # Remove 'textures/' prefix if present
+                            normalized_path = str(commit_path).replace('\\', '/')
+                            if normalized_path.startswith('textures/'):
+                                normalized_path = normalized_path.replace('textures/', '', 1)
+                            
+                            # Try to copy texture from storage
+                            texture_filename = os.path.basename(normalized_path)
+                            storage_texture_path = storage_textures_dir / texture_filename
+                            working_texture_path = working_textures_dir / texture_filename
+                            
+                            if storage_texture_path.exists() and storage_texture_path.is_file():
+                                try:
+                                    shutil.copy2(storage_texture_path, working_texture_path)
+                                    logger.debug(f"Copied texture: {texture_filename} to {working_texture_path}")
+                                    # Update commit_path to point to working directory
+                                    texture_info['commit_path'] = f"textures/{texture_filename}"
+                                except Exception as e:
+                                    logger.warning(f"Failed to copy texture {texture_filename}: {e}", exc_info=True)
+                            else:
+                                logger.warning(f"Texture not found in storage: {storage_texture_path}")
+
+                # Save mesh.json
                 mesh_json_path = mesh_dir / "mesh.json"
                 with open(mesh_json_path, 'w', encoding='utf-8') as f:
                     json.dump(mesh.mesh_json, f, indent=2, ensure_ascii=False)
 
-                # Save material.json
+                # Save material.json with updated paths
                 material_json_path = mesh_dir / "material.json"
                 with open(material_json_path, 'w', encoding='utf-8') as f:
-                    json.dump(mesh.material_json, f, indent=2, ensure_ascii=False)
+                    json.dump(material_json, f, indent=2, ensure_ascii=False)
 
             except FileNotFoundError as e:
                 # Skip meshes that can't be restored

@@ -35,6 +35,10 @@ Difference Machine is a Blender add-on that provides Git-like version control fu
   - Vertices count
   - Faces count
 - **Export Options**: Control what gets exported (vertices, faces, UV, normals, materials, transform)
+- **Background Mesh Export**: Mesh-only commits are created in background process
+  - Uses `empty.blend` template file to avoid modifying current project
+  - Exports meshes without affecting your working scene
+  - Ensures project stability during commit creation
 
 ### Mesh Diff Analysis
 - **3D Diff Visualization**: Analyze differences between mesh versions
@@ -191,7 +195,10 @@ difference_machine/
 │   ├── history_operators.py # History viewing, compare, replace
 │   ├── branch_operators.py  # Branch operations
 │   ├── mesh_io.py          # Mesh export/import utilities
+│   ├── mesh_export_background.py  # Background mesh export script
 │   └── operator_helpers.py # Common helper functions
+├── empty_files/            # Template files for background export
+│   └── empty.blend         # Empty Blender file template
 ├── ui/                      # User interface (panels, menus)
 │   ├── ui_panels.py        # Main UI panels
 │   ├── ui_lists.py         # UI lists for commits and branches
@@ -219,6 +226,12 @@ difference_machine/
 - **Garbage Collection**: Safe removal of unreferenced objects with reference checking
 - **Automatic Cleanup**: Temporary preview directories are automatically cleaned up to prevent repository size growth
 - **Logging**: Comprehensive logging system for debugging and error tracking
+- **Background Mesh Export**: Mesh-only commits use background Blender process
+  - Runs separate Blender instance in `--background` mode
+  - Uses `empty.blend` template from `empty_files/` directory
+  - Exports meshes without modifying current project scene
+  - Ensures project stability and prevents scene corruption
+  - Implementation: `operators/mesh_export_background.py` (background script) and `operators/mesh_io.py` (export function)
 - **Mesh Diff**: Analytical comparison of mesh geometry and materials
   - Vertex matching with tolerance-based comparison
   - Face topology comparison
