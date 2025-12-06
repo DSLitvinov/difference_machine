@@ -616,12 +616,12 @@ class DF_OT_replace_mesh(Operator):
 
     def execute(self, context):
         """Execute the operator."""
-        # Get active mesh object
-        active_obj, error = get_active_mesh_object(self)
-        if not active_obj:
+        # Get active mesh object and save reference BEFORE import
+        original_obj, error = get_active_mesh_object(self)
+        if not original_obj:
             return {'CANCELLED'}
         
-        mesh_name = active_obj.name
+        mesh_name = original_obj.name
         
         # Find repository
         repo_path, error = get_repository_path(self)
@@ -642,36 +642,66 @@ class DF_OT_replace_mesh(Operator):
             from ..operators.mesh_io import import_mesh_from_blend
             
             # Сначала загружаем объект из .blend
+            # ВАЖНО: import_mesh_from_blend меняет active_object, поэтому сохраняем original_obj заранее
             imported_obj = import_mesh_from_blend(blend_path, actual_mesh_name, context)
             
             if not imported_obj:
                 self.report({'ERROR'}, f"Failed to load mesh from .blend file")
                 return {'CANCELLED'}
             
-            # Копируем данные в выбранный объект
-            active_obj = context.active_object
-            if active_obj and active_obj.type == 'MESH':
+            # Восстанавливаем активный объект на оригинальный
+            context.view_layer.objects.active = original_obj
+            original_obj.select_set(True)
+            imported_obj.select_set(False)
+            
+            # Копируем данные mesh из импортированного объекта в оригинальный
+            if original_obj.type == 'MESH' and imported_obj.type == 'MESH':
+                # Сохраняем старое mesh data для удаления
+                old_mesh_data = original_obj.data
+                
                 # Копируем mesh data
-                active_obj.data = imported_obj.data.copy()
+                original_obj.data = imported_obj.data.copy()
+                
                 # Копируем материалы
-                # Очищаем материалы через data.materials (material_slots не поддерживает clear)
-                active_obj.data.materials.clear()
+                original_obj.data.materials.clear()
                 for slot in imported_obj.material_slots:
                     if slot.material:
-                        active_obj.data.materials.append(slot.material)
+                        original_obj.data.materials.append(slot.material)
+                
+                # Обновляем mesh
+                original_obj.data.update()
+                original_obj.update_tag()
+                
+                # Удаляем старое mesh data (если оно больше не используется)
+                if old_mesh_data.users == 0:
+                    bpy.data.meshes.remove(old_mesh_data)
                 
                 # Удаляем импортированный объект
                 bpy.data.objects.remove(imported_obj, do_unlink=True)
                 
-                # Загружаем текстуры
+                # Загружаем текстуры из метаданных
                 material_json = metadata.get('material_json', {})
-                if material_json and 'textures' in material_json and mesh_storage_path:
+                
+                # Если material_json это строка, парсим её
+                if isinstance(material_json, str):
+                    try:
+                        import json
+                        material_json = json.loads(material_json) if material_json.strip() else {}
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.warning(f"Failed to parse material_json as JSON: {e}")
+                        material_json = {}
+                
+                if material_json and isinstance(material_json, dict) and 'textures' in material_json and mesh_storage_path:
                     from ..operators.mesh_io import load_textures_to_material
-                    if active_obj.material_slots and active_obj.material_slots[0].material:
-                        load_textures_to_material(active_obj.material_slots[0].material, material_json['textures'], mesh_storage_path)
+                    if original_obj.material_slots and len(original_obj.material_slots) > 0:
+                        mat = original_obj.material_slots[0].material
+                        if mat:
+                            load_textures_to_material(mat, material_json['textures'], mesh_storage_path)
             else:
-                # Если нет активного объекта, просто используем импортированный
-                pass
+                # Если оригинальный объект не mesh, просто удаляем импортированный
+                bpy.data.objects.remove(imported_obj, do_unlink=True)
+                self.report({'ERROR'}, "Active object is not a mesh")
+                return {'CANCELLED'}
             
             self.report({'INFO'}, f"Replaced mesh '{mesh_name}' with version from commit")
             return {'FINISHED'}
