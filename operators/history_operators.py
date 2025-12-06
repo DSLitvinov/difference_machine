@@ -26,9 +26,6 @@ from .operator_helpers import (
     cleanup_old_compare_temp,
     copy_project_textures_for_compare,
 )
-from ..forester.utils.mesh_diff_utils import compute_mesh_diff
-from ..forester.models.mesh_diff import MeshDiff
-
 logger = logging.getLogger(__name__)
 class DF_OT_select_commit(Operator):
     """Select a commit in the history list."""
@@ -858,25 +855,83 @@ class DF_OT_compare_mesh(Operator):
                 current_mesh_json = current_mesh_data['mesh_json']
                 current_material_json = current_mesh_data['material_json']
                 
-                diff = compute_mesh_diff(
-                    mesh_name=mesh_name,
-                    old_mesh_json=mesh_json,
-                    old_material_json=material_json,
-                    new_mesh_json=current_mesh_json,
-                    new_material_json=current_material_json,
-                    tolerance=0.001
-                )
+                # Extract mesh_json and material_json from metadata
+                import json
+                old_mesh_json_raw = metadata.get('mesh_json')
+                old_material_json_raw = metadata.get('material_json')
                 
-                # Store diff in scene properties
-                scene['df_diff_result'] = diff.to_dict()
-                scene['df_diff_mesh_name'] = mesh_name
-                scene['df_diff_commit_hash'] = self.commit_hash
+                # Normalize mesh_json
+                old_mesh_json = {}
+                if old_mesh_json_raw is not None:
+                    if isinstance(old_mesh_json_raw, dict):
+                        old_mesh_json = old_mesh_json_raw
+                    elif isinstance(old_mesh_json_raw, str):
+                        if old_mesh_json_raw.strip():  # Not empty string
+                            try:
+                                old_mesh_json = json.loads(old_mesh_json_raw)
+                            except (json.JSONDecodeError, ValueError) as e:
+                                logger.warning(f"Failed to parse old_mesh_json as JSON: {e}")
+                                old_mesh_json = {}
                 
-                # Report diff statistics
-                stats = diff.statistics
-                logger.info(f"Diff computed: +{stats.vertices_added_count} "
-                           f"-{stats.vertices_removed_count} "
-                           f"~{stats.vertices_modified_count} vertices")
+                # Normalize material_json
+                old_material_json = {}
+                if old_material_json_raw is not None:
+                    if isinstance(old_material_json_raw, dict):
+                        old_material_json = old_material_json_raw
+                    elif isinstance(old_material_json_raw, str):
+                        if old_material_json_raw.strip():  # Not empty string
+                            try:
+                                old_material_json = json.loads(old_material_json_raw)
+                            except (json.JSONDecodeError, ValueError) as e:
+                                logger.warning(f"Failed to parse old_material_json as JSON: {e}")
+                                old_material_json = {}
+                
+                # If mesh_json is still empty, try to load from separate file
+                if not old_mesh_json and mesh_storage_path:
+                    mesh_json_path = mesh_storage_path / "mesh.json"
+                    if mesh_json_path.exists():
+                        try:
+                            with open(mesh_json_path, 'r', encoding='utf-8') as f:
+                                old_mesh_json = json.load(f)
+                            logger.info(f"Loaded mesh_json from separate file: {mesh_json_path}")
+                        except Exception as e:
+                            logger.warning(f"Failed to load mesh.json from {mesh_json_path}: {e}")
+                
+                # If material_json is still empty, try to load from separate file
+                if not old_material_json and mesh_storage_path:
+                    material_json_path = mesh_storage_path / "material.json"
+                    if material_json_path.exists():
+                        try:
+                            with open(material_json_path, 'r', encoding='utf-8') as f:
+                                old_material_json = json.load(f)
+                            logger.info(f"Loaded material_json from separate file: {material_json_path}")
+                        except Exception as e:
+                            logger.warning(f"Failed to load material.json from {material_json_path}: {e}")
+                
+                # Final check - mesh_json must be a non-empty dict
+                if not old_mesh_json or not isinstance(old_mesh_json, dict) or len(old_mesh_json) == 0:
+                    logger.warning(f"No valid old_mesh_json found. Type: {type(old_mesh_json_raw)}, Value: {repr(old_mesh_json_raw)[:100] if old_mesh_json_raw else 'None'}")
+                    logger.warning("Skipping diff computation")
+                else:
+                    diff = compute_mesh_diff(
+                        mesh_name=mesh_name,
+                        old_mesh_json=old_mesh_json,
+                        old_material_json=old_material_json,
+                        new_mesh_json=current_mesh_json,
+                        new_material_json=current_material_json,
+                        tolerance=0.001
+                    )
+                    
+                    # Store diff in scene properties
+                    scene['df_diff_result'] = diff.to_dict()
+                    scene['df_diff_mesh_name'] = mesh_name
+                    scene['df_diff_commit_hash'] = self.commit_hash
+                    
+                    # Report diff statistics
+                    stats = diff.statistics
+                    logger.info(f"Diff computed: +{stats.vertices_added_count} "
+                               f"-{stats.vertices_removed_count} "
+                               f"~{stats.vertices_modified_count} vertices")
             except Exception as e:
                 logger.warning(f"Failed to compute diff during comparison: {e}", exc_info=True)
                 # Don't fail the comparison if diff computation fails
@@ -1026,289 +1081,3 @@ class DF_OT_switch_comparison_axis(Operator):
             self.report({'ERROR'}, f"Failed to switch comparison axis: {str(e)}")
             logger.error(f"Unexpected error switching comparison axis: {e}", exc_info=True)
             return {'CANCELLED'}
-
-
-def visualize_mesh_diff(
-    mesh_obj: bpy.types.Object,
-    diff: MeshDiff,
-    color_scheme: str = 'displacement'
-) -> None:
-    """
-    Visualize mesh differences using vertex colors.
-    
-    Args:
-        mesh_obj: Blender mesh object to colorize
-        diff: MeshDiff object with changes
-        color_scheme: Color scheme ('displacement', 'added', 'removed', 'modified')
-    """
-    mesh = mesh_obj.data
-    
-    # Create vertex color layer if it doesn't exist
-    color_layer_name = "DiffColors"
-    if color_layer_name not in mesh.vertex_colors:
-        mesh.vertex_colors.new(name=color_layer_name)
-    
-    color_layer = mesh.vertex_colors[color_layer_name]
-    color_layer.active = True
-    
-    # Default color (gray for unchanged)
-    default_color = (0.5, 0.5, 0.5, 1.0)
-    
-    # Initialize all loops to default color
-    for poly in mesh.polygons:
-        for loop_idx in poly.loop_indices:
-            color_layer.data[loop_idx].color = default_color
-    
-    if color_scheme == 'displacement':
-        # Color by vertex displacement magnitude
-        if diff.geometry_diff.vertices_moved:
-            max_displacement = max(diff.geometry_diff.vertices_moved.values()) if diff.geometry_diff.vertices_moved.values() else 1.0
-            if max_displacement == 0:
-                max_displacement = 1.0
-            
-            for poly in mesh.polygons:
-                for loop_idx in poly.loop_indices:
-                    vertex_idx = mesh.loops[loop_idx].vertex_index
-                    
-                    if vertex_idx in diff.geometry_diff.vertices_moved:
-                        displacement = diff.geometry_diff.vertices_moved[vertex_idx]
-                        # Red = more changes, green = less changes
-                        intensity = min(displacement / max_displacement, 1.0)
-                        color_layer.data[loop_idx].color = (intensity, 1.0 - intensity * 0.5, 0.0, 1.0)
-                    elif vertex_idx in diff.geometry_diff.vertices_added:
-                        color_layer.data[loop_idx].color = (0.0, 1.0, 0.0, 1.0)  # Green
-                    elif vertex_idx in diff.geometry_diff.vertices_removed:
-                        color_layer.data[loop_idx].color = (1.0, 0.0, 0.0, 1.0)  # Red
-    
-    elif color_scheme == 'added':
-        # Green for added vertices
-        for poly in mesh.polygons:
-            for loop_idx in poly.loop_indices:
-                vertex_idx = mesh.loops[loop_idx].vertex_index
-                if vertex_idx in diff.geometry_diff.vertices_added:
-                    color_layer.data[loop_idx].color = (0.0, 1.0, 0.0, 1.0)  # Green
-    
-    elif color_scheme == 'removed':
-        # Red for removed vertices (if they still exist in new mesh)
-        for poly in mesh.polygons:
-            for loop_idx in poly.loop_indices:
-                vertex_idx = mesh.loops[loop_idx].vertex_index
-                if vertex_idx in diff.geometry_diff.vertices_removed:
-                    color_layer.data[loop_idx].color = (1.0, 0.0, 0.0, 1.0)  # Red
-    
-    elif color_scheme == 'modified':
-        # Yellow for modified vertices
-        for poly in mesh.polygons:
-            for loop_idx in poly.loop_indices:
-                vertex_idx = mesh.loops[loop_idx].vertex_index
-                if vertex_idx in diff.geometry_diff.vertices_modified:
-                    color_layer.data[loop_idx].color = (1.0, 1.0, 0.0, 1.0)  # Yellow
-    
-    # Update mesh
-    mesh.update()
-
-
-class DF_OT_compute_mesh_diff(Operator):
-    """Compute diff between current mesh and version from commit."""
-    bl_idname = "df.compute_mesh_diff"
-    bl_label = "Compute Mesh Diff"
-    bl_description = "Compute differences between current mesh and version from commit"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    commit_hash: StringProperty(name="Commit Hash")
-
-    def execute(self, context):
-        """Execute the operator."""
-        # Get active mesh object
-        active_obj, error = get_active_mesh_object(self)
-        if not active_obj:
-            return {'CANCELLED'}
-        
-        mesh_name = active_obj.name
-        
-        # Export current mesh
-        from .mesh_io import export_mesh_to_json
-        from ..properties.properties import DFCommitProperties
-        
-        # Create temporary export options (export all)
-        export_options = {
-            'vertices': True,
-            'faces': True,
-            'uv': True,
-            'normals': True,
-            'materials': True,
-        }
-        
-        try:
-            current_mesh_data = export_mesh_to_json(active_obj, export_options)
-            current_mesh_json = current_mesh_data['mesh_json']
-            current_material_json = current_mesh_data['material_json']
-        except Exception as e:
-            self.report({'ERROR'}, f"Failed to export current mesh: {str(e)}")
-            logger.error(f"Failed to export current mesh: {e}", exc_info=True)
-            return {'CANCELLED'}
-        
-        # Find repository
-        repo_path, error = get_repository_path(self)
-        if not repo_path:
-            return {'CANCELLED'}
-        
-        # Load mesh from commit
-        try:
-            old_mesh_json, old_material_json, mesh_storage_path = load_mesh_from_commit(
-                repo_path, self.commit_hash, mesh_name
-            )
-            
-            if not old_mesh_json:
-                self.report({'ERROR'}, f"Mesh '{mesh_name}' not found in commit")
-                return {'CANCELLED'}
-            
-            # Compute diff
-            diff = compute_mesh_diff(
-                mesh_name=mesh_name,
-                old_mesh_json=old_mesh_json,
-                old_material_json=old_material_json,
-                new_mesh_json=current_mesh_json,
-                new_material_json=current_material_json,
-                tolerance=0.001
-            )
-            
-            # Store diff in scene properties
-            scene = context.scene
-            if not hasattr(scene, 'df_diff_result'):
-                # Create property to store diff
-                bpy.types.Scene.df_diff_result = bpy.props.PointerProperty(type=bpy.types.PropertyGroup)
-            
-            # Store diff statistics in scene
-            scene['df_diff_result'] = diff.to_dict()
-            scene['df_diff_mesh_name'] = mesh_name
-            scene['df_diff_commit_hash'] = self.commit_hash
-            
-            # Report statistics
-            stats = diff.statistics
-            self.report({'INFO'}, 
-                       f"Diff computed: +{stats.vertices_added_count} "
-                       f"-{stats.vertices_removed_count} "
-                       f"~{stats.vertices_modified_count} vertices, "
-                       f"Geometry: {stats.geometry_change_percent:.1f}%, "
-                       f"Material: {stats.material_change_percent:.1f}%")
-            
-            return {'FINISHED'}
-        except (ValueError, FileNotFoundError, KeyError) as e:
-            self.report({'ERROR'}, f"Failed to compute diff: {str(e)}")
-            logger.error(f"Failed to compute diff: {e}", exc_info=True)
-            return {'CANCELLED'}
-        except Exception as e:
-            self.report({'ERROR'}, f"Failed to compute diff: {str(e)}")
-            logger.error(f"Unexpected error computing diff: {e}", exc_info=True)
-            return {'CANCELLED'}
-
-
-class DF_OT_visualize_mesh_diff(Operator):
-    """Visualize mesh diff using vertex colors."""
-    bl_idname = "df.visualize_mesh_diff"
-    bl_label = "Visualize Diff"
-    bl_description = "Visualize mesh differences using vertex colors"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    color_scheme: bpy.props.EnumProperty(
-        name="Color Scheme",
-        description="Color scheme for visualization",
-        items=[
-            ('displacement', 'Displacement', 'Color by vertex displacement magnitude'),
-            ('added', 'Added', 'Green for added vertices'),
-            ('removed', 'Removed', 'Red for removed vertices'),
-            ('modified', 'Modified', 'Yellow for modified vertices'),
-        ],
-        default='displacement',
-    )
-
-    def execute(self, context):
-        """Execute the operator."""
-        # Get active mesh object
-        active_obj, error = get_active_mesh_object(self)
-        if not active_obj:
-            return {'CANCELLED'}
-        
-        # Get diff from scene properties
-        scene = context.scene
-        if 'df_diff_result' not in scene:
-            self.report({'ERROR'}, "No diff computed. Compute diff first.")
-            return {'CANCELLED'}
-        
-        # Reconstruct diff from stored data
-        diff_dict = scene['df_diff_result']
-        mesh_name = scene.get('df_diff_mesh_name', active_obj.name)
-        
-        # Create MeshDiff from dict (simplified - just for visualization)
-        from ..forester.models.mesh_diff import MeshDiff, GeometryDiff, MaterialDiff, DiffStatistics
-        
-        geometry_diff = GeometryDiff()
-        geometry_diff.vertices_added = diff_dict.get('geometry_diff', {}).get('vertices_added', [])
-        geometry_diff.vertices_removed = diff_dict.get('geometry_diff', {}).get('vertices_removed', [])
-        geometry_diff.vertices_moved = {
-            int(k): v for k, v in diff_dict.get('geometry_diff', {}).get('vertices_moved', {}).items()
-        }
-        geometry_diff.vertices_modified = {
-            int(k): v for k, v in diff_dict.get('geometry_diff', {}).get('vertices_modified', {}).items()
-        }
-        
-        material_diff = MaterialDiff()
-        stats = DiffStatistics()
-        
-        diff = MeshDiff(
-            mesh_name=mesh_name,
-            geometry_diff=geometry_diff,
-            material_diff=material_diff,
-            statistics=stats
-        )
-        
-        # Visualize
-        try:
-            visualize_mesh_diff(active_obj, diff, self.color_scheme)
-            
-            # Enable vertex color display in viewport
-            for area in context.screen.areas:
-                if area.type == 'VIEW_3D':
-                    for space in area.spaces:
-                        if space.type == 'VIEW_3D':
-                            space.shading.color_type = 'VERTEX'
-                            break
-            
-            self.report({'INFO'}, f"Diff visualized using '{self.color_scheme}' scheme")
-            return {'FINISHED'}
-        except Exception as e:
-            self.report({'ERROR'}, f"Failed to visualize diff: {str(e)}")
-            logger.error(f"Failed to visualize diff: {e}", exc_info=True)
-            return {'CANCELLED'}
-
-
-class DF_OT_clear_mesh_diff(Operator):
-    """Clear mesh diff data."""
-    bl_idname = "df.clear_mesh_diff"
-    bl_label = "Clear Diff"
-    bl_description = "Clear computed mesh diff data"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        """Execute the operator."""
-        scene = context.scene
-        
-        # Clear diff data
-        if 'df_diff_result' in scene:
-            del scene['df_diff_result']
-        if 'df_diff_mesh_name' in scene:
-            del scene['df_diff_mesh_name']
-        if 'df_diff_commit_hash' in scene:
-            del scene['df_diff_commit_hash']
-        
-        # Remove vertex colors if they exist
-        active_obj = context.active_object
-        if active_obj and active_obj.type == 'MESH':
-            mesh = active_obj.data
-            if "DiffColors" in mesh.vertex_colors:
-                mesh.vertex_colors.remove(mesh.vertex_colors["DiffColors"])
-                mesh.update()
-        
-        self.report({'INFO'}, "Diff data cleared")
-        return {'FINISHED'}

@@ -235,6 +235,27 @@ def create_mesh_only_commit(
             # Filter mesh_json based on export_options (для метаданных)
             filtered_mesh_json = filter_mesh_data(mesh_json, export_options)
             
+            # Ensure filtered_mesh_json is not empty
+            if not filtered_mesh_json or len(filtered_mesh_json) == 0:
+                logger.warning(f"filtered_mesh_json is empty for {mesh_name}, creating minimal structure")
+                # Create minimal structure with at least metadata
+                if 'metadata' in mesh_json:
+                    filtered_mesh_json = {
+                        'metadata': mesh_json['metadata'],
+                        'vertices': mesh_json.get('vertices', []),
+                        'faces': mesh_json.get('faces', [])
+                    }
+                else:
+                    # Fallback: create minimal metadata
+                    filtered_mesh_json = {
+                        'metadata': {
+                            'object_name': mesh_name,
+                            'export_options': export_options
+                        },
+                        'vertices': mesh_json.get('vertices', []),
+                        'faces': mesh_json.get('faces', [])
+                    }
+            
             # Обновляем метаданные с отфильтрованными данными
             filtered_metadata = metadata.copy()
             filtered_metadata['mesh_json'] = filtered_mesh_json
@@ -534,7 +555,7 @@ def filter_mesh_data(mesh_json: Dict[str, Any], export_options: Dict[str, bool])
         export_options: Export options dict (or string that will be parsed)
 
     Returns:
-        Filtered mesh JSON
+        Filtered mesh JSON (always contains at least metadata and basic structure)
     """
     # Ensure export_options is a dict, not a string
     if isinstance(export_options, str):
@@ -553,26 +574,52 @@ def filter_mesh_data(mesh_json: Dict[str, Any], export_options: Dict[str, bool])
     if export_options.get('vertices', True):
         if 'vertices' in mesh_json:
             filtered['vertices'] = mesh_json['vertices']
+        else:
+            # Ensure empty list for diff compatibility
+            filtered['vertices'] = []
 
     if export_options.get('faces', True):
         if 'faces' in mesh_json:
             filtered['faces'] = mesh_json['faces']
+        else:
+            # Ensure empty list for diff compatibility
+            filtered['faces'] = []
 
     if export_options.get('uv', True):
         if 'uv' in mesh_json:
             filtered['uv'] = mesh_json['uv']
+        else:
+            # Ensure empty list for diff compatibility
+            filtered['uv'] = []
 
     if export_options.get('normals', True):
         if 'normals' in mesh_json:
             filtered['normals'] = mesh_json['normals']
+        else:
+            # Ensure empty list for diff compatibility
+            filtered['normals'] = []
 
     if export_options.get('materials', True):
         if 'materials' in mesh_json:
             filtered['materials'] = mesh_json['materials']
+        else:
+            # Ensure empty list for diff compatibility
+            filtered['materials'] = []
 
     # Always include basic metadata
     if 'metadata' in mesh_json:
         filtered['metadata'] = mesh_json['metadata']
+    else:
+        # Create minimal metadata if not present
+        filtered['metadata'] = {}
+
+    # Ensure filtered is never empty - at minimum contains metadata and basic structure
+    if not filtered or (len(filtered) == 1 and 'metadata' in filtered):
+        # If only metadata exists, ensure we have at least empty lists for diff
+        if 'vertices' not in filtered:
+            filtered['vertices'] = []
+        if 'faces' not in filtered:
+            filtered['faces'] = []
 
     return filtered
 

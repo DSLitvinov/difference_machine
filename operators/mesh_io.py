@@ -309,6 +309,24 @@ def export_mesh_to_json(obj, export_options):
         'face_count': len(mesh.polygons) if mesh.polygons else 0,
     }
     
+    # Ensure mesh_json is never empty - at minimum contains metadata
+    if not mesh_json or len(mesh_json) == 0:
+        logger.warning(f"export_mesh_to_json: mesh_json is empty for {obj.name}, creating minimal structure")
+        mesh_json = {
+            'metadata': {
+                'object_name': obj.name,
+                'vertex_count': len(mesh.vertices),
+                'face_count': len(mesh.polygons) if mesh.polygons else 0,
+            },
+            'vertices': [],
+            'faces': []
+        }
+    # Ensure at least vertices and faces exist (even if empty) for diff compatibility
+    if 'vertices' not in mesh_json:
+        mesh_json['vertices'] = []
+    if 'faces' not in mesh_json:
+        mesh_json['faces'] = []
+    
     return {
         'mesh_json': mesh_json,
         'material_json': material_json,

@@ -8,7 +8,6 @@ from .ui_panels import (
     DF_PT_commit_panel,
     DF_PT_history_panel,
     DF_PT_branch_panel,
-    DF_PT_diff_panel,
 )
 from .ui_lists import (
     DF_UL_branch_list,
@@ -38,9 +37,6 @@ from ..operators.history_operators import (
     DF_OT_compare_project,
     DF_OT_switch_comparison_axis,
     DF_OT_select_mesh_from_commit,
-    DF_OT_compute_mesh_diff,
-    DF_OT_visualize_mesh_diff,
-    DF_OT_clear_mesh_diff,
 )
 from ..operators.branch_operators import (
     DF_OT_sort_branches,
@@ -62,7 +58,6 @@ classes = [
     DF_PT_commit_panel,
     DF_PT_history_panel,
     DF_PT_branch_panel,
-    DF_PT_diff_panel,
     # Operators
     DF_OT_create_project_commit,
     DF_OT_create_mesh_commit,
@@ -86,9 +81,6 @@ classes = [
     DF_OT_compare_project,
     DF_OT_switch_comparison_axis,
     DF_OT_select_mesh_from_commit,
-    DF_OT_compute_mesh_diff,
-    DF_OT_visualize_mesh_diff,
-    DF_OT_clear_mesh_diff,
     # Branch operators
     DF_OT_sort_branches,
     # Export operators
